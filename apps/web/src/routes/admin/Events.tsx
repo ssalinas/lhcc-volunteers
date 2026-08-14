@@ -21,7 +21,7 @@ export default function AdminEvents() {
   return (
     <div>
       <h1 style={{ marginBottom: '0.5rem' }}>Upcoming Occurrences</h1>
-      <p style={{ marginTop: 0, color: '#666' }}>Next {UPCOMING_WEEKS} weeks — click one to schedule volunteers.</p>
+      <p style={{ marginTop: 0, color: 'var(--color-text-muted)' }}>Next {UPCOMING_WEEKS} weeks — click one to schedule volunteers.</p>
 
       {occurrencesLoading ? (
         <p>Loading…</p>
@@ -34,34 +34,24 @@ export default function AdminEvents() {
                 key={o.id}
                 type="button"
                 onClick={() => navigate(`/admin/occurrences/${o.id}`)}
+                className="card card-hover"
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '0.75rem 1rem',
-                  background: '#fff',
-                  borderRadius: 8,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                  padding: '0.85rem 1.1rem',
                   border: 'none',
                   cursor: 'pointer',
                   textAlign: 'left',
                   width: '100%',
+                  fontFamily: 'inherit',
                 }}
               >
                 <span>
                   <strong>{o.eventName}</strong>{' '}
-                  <span style={{ color: '#666', fontSize: '0.85rem' }}>{format(new Date(o.startAt), 'EEE, MMM d · p')}</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{format(new Date(o.startAt), 'EEE, MMM d · p')}</span>
                 </span>
-                <span
-                  style={{
-                    fontSize: '0.78rem',
-                    padding: '0.2rem 0.6rem',
-                    borderRadius: 999,
-                    background: fullyStaffed ? '#e6f0ea' : '#fdecc8',
-                    color: fullyStaffed ? '#2f6f4f' : '#8a6d00',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <span className={`badge ${o.totalSlots === 0 ? 'badge-neutral' : fullyStaffed ? 'badge-success' : 'badge-warning'}`}>
                   {o.totalSlots === 0 ? 'No roles' : fullyStaffed ? 'Fully staffed' : `Needs volunteers (${o.filledSlots}/${o.totalSlots})`}
                 </span>
               </button>
@@ -73,10 +63,7 @@ export default function AdminEvents() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1 style={{ margin: 0 }}>Events</h1>
-        <Link
-          to="/admin/events/new"
-          style={{ padding: '0.5rem 1.25rem', borderRadius: 8, background: '#2f6f4f', color: '#fff', textDecoration: 'none' }}
-        >
+        <Link to="/admin/events/new" className="btn btn-primary">
           + New event
         </Link>
       </div>
@@ -86,35 +73,21 @@ export default function AdminEvents() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {events?.map((e) => (
-            <div
-              key={e.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '1rem',
-                background: '#fff',
-                borderRadius: 10,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              }}
-            >
+            <div key={e.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{e.name}</div>
-                <div style={{ color: '#666', fontSize: '0.85rem' }}>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
                   {e.isRecurring ? `Recurring · ${e.rrule}` : 'One-off'} · {e.defaultStartTime} · {e.location ?? 'No location set'}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <Link
-                  to={`/admin/events/${e.id}`}
-                  style={{ padding: '0.4rem 0.9rem', borderRadius: 8, border: '1px solid #ccc', textDecoration: 'none', color: '#333' }}
-                >
+                <Link to={`/admin/events/${e.id}`} className="btn btn-secondary btn-sm">
                   Edit
                 </Link>
                 <button
                   type="button"
                   onClick={() => confirm(`Archive "${e.name}"? Existing occurrences are kept, but no new ones will be generated.`) && archive.mutate(e.id)}
-                  style={{ padding: '0.4rem 0.9rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
+                  className="btn btn-secondary btn-sm"
                 >
                   Archive
                 </button>

@@ -69,30 +69,28 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
           return (
             <div
               key={date}
+              className="card"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: '0.5rem',
-                padding: '0.65rem 1rem',
-                background: '#fff',
-                borderRadius: 8,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                padding: '0.65rem 1.1rem',
               }}
             >
               <div>
                 <div style={{ fontWeight: 600 }}>{format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}</div>
-                <div style={{ color: '#888', fontSize: '0.8rem' }}>{eventNames.join(', ')}</div>
+                <div style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{eventNames.join(', ')}</div>
               </div>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <ToggleButton active={status === 'available'} color="#2f6f4f" onClick={() => toggle(date, 'available')}>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <ToggleButton active={status === 'available'} variant="success" onClick={() => toggle(date, 'available')}>
                   Available
                 </ToggleButton>
-                <ToggleButton active={status === 'unavailable'} color="#b00020" onClick={() => toggle(date, 'unavailable')}>
+                <ToggleButton active={status === 'unavailable'} variant="danger" onClick={() => toggle(date, 'unavailable')}>
                   Unavailable
                 </ToggleButton>
-                {!status && <span style={{ color: '#aaa', fontSize: '0.8rem', alignSelf: 'center' }}>Not yet responded</span>}
+                {!status && <span style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>Not yet responded</span>}
               </div>
             </div>
           );
@@ -100,18 +98,18 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
       </div>
 
       {pageCount > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-          <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={pageButtonStyle}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.25rem' }}>
+          <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="btn btn-secondary btn-sm">
             ← Prev
           </button>
-          <span style={{ fontSize: '0.85rem', color: '#666' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
             Page {page + 1} of {pageCount}
           </span>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
             disabled={page >= pageCount - 1}
-            style={pageButtonStyle}
+            className="btn btn-secondary btn-sm"
           >
             Next →
           </button>
@@ -123,39 +121,33 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
 
 function ToggleButton({
   active,
-  color,
+  variant,
   onClick,
   children,
 }: {
   active: boolean;
-  color: string;
+  variant: 'success' | 'danger';
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  const activeBg = variant === 'success' ? 'var(--color-success)' : 'var(--color-danger)';
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
         padding: '0.4rem 0.8rem',
-        borderRadius: 6,
-        border: `1px solid ${active ? color : '#ccc'}`,
-        background: active ? color : '#fff',
-        color: active ? '#fff' : '#333',
+        borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${active ? activeBg : 'var(--color-border)'}`,
+        background: active ? activeBg : 'var(--color-surface)',
+        color: active ? '#fff' : 'var(--color-text)',
         cursor: 'pointer',
         fontSize: '0.85rem',
+        fontFamily: 'inherit',
+        fontWeight: 600,
       }}
     >
       {children}
     </button>
   );
 }
-
-const pageButtonStyle: React.CSSProperties = {
-  padding: '0.4rem 0.9rem',
-  borderRadius: 6,
-  border: '1px solid #ccc',
-  background: '#fff',
-  cursor: 'pointer',
-  fontSize: '0.85rem',
-};

@@ -44,21 +44,16 @@ export default function AdminOccurrenceDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 style={{ marginBottom: 0 }}>{occurrence.eventName}</h1>
-          <p style={{ color: '#666', marginTop: '0.25rem' }}>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
             {format(new Date(occurrence.startAt), 'PPPP p')} · {occurrence.location ?? 'No location set'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleAutoSchedule}
-          disabled={autoSchedule.isPending}
-          style={{ padding: '0.6rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
-        >
+        <button type="button" onClick={handleAutoSchedule} disabled={autoSchedule.isPending} className="btn btn-primary">
           {autoSchedule.isPending ? 'Scheduling…' : 'Auto-schedule'}
         </button>
       </div>
       {autoScheduleMessage && (
-        <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '0.75rem 1rem', marginTop: '1rem', fontSize: '0.9rem' }}>
+        <div className="card" style={{ padding: '0.75rem 1rem', marginTop: '1rem', fontSize: '0.9rem', background: 'var(--color-primary-light)', boxShadow: 'none' }}>
           {autoScheduleMessage}
         </div>
       )}
@@ -88,31 +83,28 @@ function RoleCard({
   const isOverStaffed = activeAssignments.length > role.slotsCount;
 
   return (
-    <div style={{ background: '#fff', borderRadius: 10, padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }}>
+    <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>
-          {role.name} {role.stackable && <span style={{ fontWeight: 400, color: '#999', fontSize: '0.8rem' }}>(stackable)</span>}
+          {role.name}{' '}
+          {role.stackable && <span style={{ fontWeight: 400, color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>(stackable)</span>}
         </strong>
-        <span style={{ color: isFull ? '#2f6f4f' : '#8a6d00', fontSize: '0.85rem' }}>
+        <span className={`badge ${isFull ? 'badge-success' : 'badge-warning'}`}>
           {activeAssignments.length}/{role.slotsCount} filled{isOverStaffed ? ' (extra added)' : ''}
         </span>
       </div>
-      <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+      <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
         {role.assignments.map((a) => (
           <div key={a.id} style={{ fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
               {a.user?.name ?? a.userId} <StatusBadge status={a.status} />
             </span>
-            <button
-              type="button"
-              onClick={() => deleteAssignment.mutate({ id: a.id, occurrenceId })}
-              style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer', fontSize: '0.8rem' }}
-            >
+            <button type="button" onClick={() => deleteAssignment.mutate({ id: a.id, occurrenceId })} className="btn-ghost" style={{ fontSize: '0.8rem' }}>
               Remove
             </button>
           </div>
         ))}
-        {role.assignments.length === 0 && <span style={{ color: '#999', fontSize: '0.85rem' }}>No one assigned yet.</span>}
+        {role.assignments.length === 0 && <span style={{ color: 'var(--color-text-faint)', fontSize: '0.85rem' }}>No one assigned yet.</span>}
       </div>
 
       <AssignPicker occurrenceId={occurrenceId} roleId={role.id} addingExtra={isFull} />
@@ -122,10 +114,10 @@ function RoleCard({
 
 function StatusBadge({ status }: { status: AssignmentStatus }) {
   const colors: Record<AssignmentStatus, string> = {
-    scheduled: '#8a6d00',
-    confirmed: '#2f6f4f',
-    declined: '#b00020',
-    completed: '#555',
+    scheduled: '#9a6b00',
+    confirmed: 'var(--color-success)',
+    declined: 'var(--color-danger)',
+    completed: 'var(--color-text-faint)',
   };
   return <span style={{ color: colors[status], fontSize: '0.75rem' }}>({status})</span>;
 }
@@ -167,7 +159,7 @@ function AssignPicker({
   return (
     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', alignItems: 'center' }}>
       {addingExtra && (
-        <span style={{ fontSize: '0.75rem', color: '#8a6d00', whiteSpace: 'nowrap' }}>Add extra:</span>
+        <span style={{ fontSize: '0.75rem', color: '#9a6b00', whiteSpace: 'nowrap', fontWeight: 600 }}>Add extra:</span>
       )}
       <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ flex: 1 }}>
         <option value="">Assign a volunteer…</option>
@@ -178,15 +170,10 @@ function AssignPicker({
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        disabled={!selected || createAssignment.isPending}
-        onClick={() => handleAssign(false)}
-        style={{ padding: '0.4rem 1rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
-      >
+      <button type="button" disabled={!selected || createAssignment.isPending} onClick={() => handleAssign(false)} className="btn btn-primary btn-sm">
         Assign
       </button>
-      {error && <span style={{ color: '#b00020', fontSize: '0.8rem' }}>{error}</span>}
+      {error && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{error}</span>}
     </div>
   );
 }
@@ -202,7 +189,7 @@ function AddRoleForm({ occurrenceId }: { occurrenceId: string }) {
   const effectiveTeamId = teamId || teams?.[0]?.id || '';
 
   return (
-    <div style={{ marginTop: '1.5rem', background: '#fff', borderRadius: 10, padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }}>
+    <div className="card" style={{ marginTop: '1.5rem' }}>
       <h3 style={{ marginTop: 0 }}>Add a role to this occurrence</h3>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={effectiveTeamId} onChange={(e) => setTeamId(e.target.value)}>
@@ -224,7 +211,7 @@ function AddRoleForm({ occurrenceId }: { occurrenceId: string }) {
             addRole.mutate({ occurrenceId, input: { teamId: effectiveTeamId, name, slotsCount, stackable } });
             setName('');
           }}
-          style={{ padding: '0.4rem 1rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+          className="btn btn-primary btn-sm"
         >
           Add role
         </button>

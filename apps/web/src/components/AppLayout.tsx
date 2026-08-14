@@ -16,14 +16,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={styles.header}>
-        <div style={styles.brand}>LHCC Volunteers</div>
+        <div style={styles.brand}>
+          <img src="/logo.png" alt="" style={styles.logo} />
+          <span>LHCC Volunteers</span>
+        </div>
         <nav style={styles.nav}>
           <NavItem to="/">Calendar</NavItem>
           <NavItem to="/availability">Availability</NavItem>
           <NavItem to="/teams">Teams</NavItem>
           {isAdmin && (
             <>
-              <span style={styles.navSep}>|</span>
+              <span style={styles.navSep} />
               <NavItem to="/admin/events">Events</NavItem>
               <NavItem to="/admin/teams">Manage Teams</NavItem>
               <NavItem to="/admin/users">Users</NavItem>
@@ -33,7 +36,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </nav>
         <div style={styles.userArea}>
           {data?.user && <span style={styles.userName}>{data.user.name}</span>}
-          <button type="button" onClick={handleSignOut} style={styles.signOutButton}>
+          <button type="button" onClick={handleSignOut} className="btn btn-secondary btn-sm">
             Sign out
           </button>
         </div>
@@ -63,32 +66,37 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '1.5rem',
-    padding: '0.75rem 1.5rem',
-    background: '#2f6f4f',
-    color: '#fff',
+    padding: '0.6rem 1.75rem',
+    background: '#fff',
+    borderBottom: '1px solid var(--color-border)',
+    boxShadow: '0 1px 3px rgba(16,24,40,0.04)',
     flexWrap: 'wrap',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10,
   },
-  brand: { fontWeight: 700, fontSize: '1.1rem' },
-  nav: { display: 'flex', gap: '0.75rem', flex: 1, flexWrap: 'wrap', alignItems: 'center' },
-  navSep: { opacity: 0.5 },
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    fontWeight: 700,
+    fontSize: '1.05rem',
+    color: 'var(--color-text)',
+    whiteSpace: 'nowrap',
+  },
+  logo: { height: 40, width: 40, objectFit: 'contain' },
+  nav: { display: 'flex', gap: '0.3rem', flex: 1, flexWrap: 'wrap', alignItems: 'center' },
+  navSep: { width: 1, height: 20, background: 'var(--color-border)', margin: '0 0.4rem' },
   navLink: {
-    color: '#e6f0ea',
+    color: 'var(--color-text-muted)',
     textDecoration: 'none',
-    fontSize: '0.9rem',
-    padding: '0.25rem 0.5rem',
-    borderRadius: 6,
+    fontSize: '0.88rem',
+    fontWeight: 600,
+    padding: '0.4rem 0.7rem',
+    borderRadius: 999,
   },
-  navLinkActive: { background: 'rgba(255,255,255,0.15)', color: '#fff' },
+  navLinkActive: { background: 'var(--color-primary-light)', color: 'var(--color-primary)' },
   userArea: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  userName: { fontSize: '0.85rem', opacity: 0.9 },
-  signOutButton: {
-    padding: '0.35rem 0.75rem',
-    borderRadius: 6,
-    border: '1px solid rgba(255,255,255,0.4)',
-    background: 'transparent',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-  },
-  main: { flex: 1, padding: '1.5rem', maxWidth: 1100, width: '100%', margin: '0 auto' },
+  userName: { fontSize: '0.85rem', color: 'var(--color-text-muted)' },
+  main: { flex: 1, padding: '1.75rem', maxWidth: 1100, width: '100%', margin: '0 auto' },
 };

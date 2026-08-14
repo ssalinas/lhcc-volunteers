@@ -27,22 +27,23 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="card"
         style={{
-          background: '#fff',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-lg)',
           padding: '1.5rem',
           width: '100%',
           maxWidth: width,
-          boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+          boxShadow: 'var(--shadow-lg)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
           <h2 style={{ margin: 0, fontSize: '1.15rem' }}>{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ border: 'none', background: 'transparent', fontSize: '1.2rem', cursor: 'pointer', color: '#999', lineHeight: 1 }}
+            className="btn-ghost"
+            style={{ fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1, border: 'none', background: 'transparent' }}
           >
             ✕
           </button>
