@@ -224,7 +224,7 @@ export default function AdminEventEditor() {
               <button
                 type="button"
                 onClick={() => eventId && deleteRoleTemplate.mutate({ eventId, templateId: t.id })}
-                style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer' }}
+                className="btn-ghost"
               >
                 Remove
               </button>
@@ -247,16 +247,16 @@ export default function AdminEventEditor() {
               onAdd={(input) => eventId && addRoleTemplate.mutate({ eventId, input })}
             />
           ) : (
-            <button type="button" onClick={addRoleRow} style={{ marginTop: '0.5rem', padding: '0.4rem 0.9rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>
+            <button type="button" onClick={addRoleRow} className="btn btn-secondary btn-sm" style={{ marginTop: '0.5rem' }}>
               + Add role
             </button>
           )}
         </div>
 
-        {error && !showConfirm && <p style={{ color: '#b00020' }}>{error}</p>}
+        {error && !showConfirm && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}>
+          <button type="submit" className="btn btn-primary">
             {isEditing ? 'Save changes' : 'Create event'}
           </button>
         </div>
@@ -294,21 +294,17 @@ export default function AdminEventEditor() {
               </label>
             )}
 
-            {error && <p style={{ color: '#b00020', margin: 0 }}>{error}</p>}
+            {error && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{error}</p>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-              >
+              <button type="button" onClick={() => setShowConfirm(false)} className="btn btn-secondary">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmSave}
                 disabled={createEvent.isPending || updateEvent.isPending}
-                style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+                className="btn btn-primary"
               >
                 {isEditing ? 'Save' : 'Create'}
               </button>
@@ -351,7 +347,7 @@ function RoleRowEditor({
       <label style={{ fontSize: '0.8rem' }}>
         <input type="checkbox" checked={row.stackable} onChange={(e) => onChange({ stackable: e.target.checked })} /> stackable
       </label>
-      <button type="button" onClick={onRemove} style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer' }}>
+      <button type="button" onClick={onRemove} className="btn-ghost">
         ✕
       </button>
     </div>
@@ -377,7 +373,7 @@ function AddExistingRoleForm({
           onAdd(row);
           setRow({ teamId: teams[0]?.id ?? '', name: '', slotsCount: 1, stackable: false, sortOrder: 0 });
         }}
-        style={{ padding: '0.4rem 0.9rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+        className="btn btn-primary btn-sm"
       >
         Add
       </button>
@@ -387,7 +383,7 @@ function AddExistingRoleForm({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.85rem', color: '#333' }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
       {label}
       {children}
     </label>

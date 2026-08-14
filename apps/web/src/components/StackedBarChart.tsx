@@ -19,12 +19,12 @@ export function StackedBarChart({ data, height = 240 }: { data: StackedBarDatum[
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem', height, borderBottom: '1px solid #ddd', padding: '0 0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem', height, borderBottom: '1px solid var(--color-border)', padding: '0 0.5rem' }}>
         {data.map((d) => {
           const total = d.segments.reduce((sum, s) => sum + s.value, 0);
           return (
             <div key={d.name} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-              <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 2 }}>{total || ''}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 2 }}>{total || ''}</div>
               <div
                 style={{
                   width: '60%',
@@ -52,7 +52,7 @@ export function StackedBarChart({ data, height = 240 }: { data: StackedBarDatum[
       </div>
       <div style={{ display: 'flex', gap: '1.5rem', padding: '0.5rem 0.5rem 0' }}>
         {data.map((d) => (
-          <div key={d.name} style={{ flex: 1, textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>
+          <div key={d.name} style={{ flex: 1, textAlign: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
             {d.name}
           </div>
         ))}

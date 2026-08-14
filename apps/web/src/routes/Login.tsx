@@ -37,15 +37,19 @@ export default function Login() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={{ marginTop: 0 }}>LHCC Volunteers</h1>
-        <button type="button" onClick={handleGoogle} style={styles.googleButton}>
+      <div className="card" style={styles.card}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <img src="/logo.png" alt="Longwood Hills Congregational Church" style={styles.logo} />
+          <h1 style={{ margin: '0.5rem 0 0', fontSize: '1.3rem', textAlign: 'center' }}>LHCC Volunteers</h1>
+        </div>
+
+        <button type="button" onClick={handleGoogle} className="btn btn-secondary" style={{ width: '100%' }}>
           Sign in with Google
         </button>
 
         <div style={styles.divider}>or</div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           <label style={styles.label}>
             Email
             <input
@@ -53,7 +57,7 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
+              style={{ width: '100%' }}
             />
           </label>
           <label style={styles.label}>
@@ -63,11 +67,11 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
+              style={{ width: '100%' }}
             />
           </label>
           {error && <div style={styles.error}>{error}</div>}
-          <button type="submit" disabled={submitting} style={styles.submitButton}>
+          <button type="submit" disabled={submitting} className="btn btn-primary" style={{ width: '100%' }}>
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
@@ -82,54 +86,31 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#fafafa',
+    background: 'radial-gradient(circle at top, var(--color-primary-lighter) 0%, var(--color-bg) 65%)',
+    padding: '1.5rem',
   },
   card: {
     width: 360,
-    padding: '2rem',
-    background: '#fff',
-    borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    maxWidth: '100%',
+    padding: '2.25rem 2rem',
   },
-  googleButton: {
-    width: '100%',
-    padding: '0.6rem',
-    borderRadius: 8,
-    border: '1px solid #ccc',
-    background: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-  },
+  logo: { width: 88, height: 88, objectFit: 'contain' },
   divider: {
     textAlign: 'center',
-    color: '#888',
-    margin: '1rem 0',
-    fontSize: '0.85rem',
+    color: 'var(--color-text-faint)',
+    margin: '1.1rem 0',
+    fontSize: '0.8rem',
   },
   label: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.25rem',
+    gap: '0.3rem',
     fontSize: '0.85rem',
-    color: '#333',
-  },
-  input: {
-    padding: '0.5rem',
-    borderRadius: 6,
-    border: '1px solid #ccc',
-    fontSize: '1rem',
+    color: 'var(--color-text-muted)',
+    fontWeight: 500,
   },
   error: {
-    color: '#b00020',
+    color: 'var(--color-danger)',
     fontSize: '0.85rem',
-  },
-  submitButton: {
-    padding: '0.6rem',
-    borderRadius: 8,
-    border: 'none',
-    background: '#2f6f4f',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
   },
 };

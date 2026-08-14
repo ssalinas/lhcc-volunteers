@@ -18,11 +18,7 @@ export default function AdminTeams() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Manage Teams</h1>
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
-        >
+        <button type="button" onClick={() => setShowCreateModal(true)} className="btn btn-primary">
           + New team
         </button>
       </div>
@@ -42,15 +38,17 @@ export default function AdminTeams() {
                 textAlign: 'left',
                 padding: '0.6rem 0.75rem',
                 marginBottom: '0.4rem',
-                borderRadius: 8,
-                border: '1px solid #ddd',
-                background: selectedTeamId === team.id ? '#e6f0ea' : '#fff',
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${selectedTeamId === team.id ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                background: selectedTeamId === team.id ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                color: selectedTeamId === team.id ? 'var(--color-primary)' : 'var(--color-text)',
                 cursor: 'pointer',
+                fontFamily: 'inherit',
               }}
             >
-              {team.name} <span style={{ color: '#999', fontSize: '0.8rem' }}>({team.memberCount})</span>
+              {team.name} <span style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>({team.memberCount})</span>
               {team.isSystemTeam && (
-                <span style={{ display: 'block', color: '#8a6d00', fontSize: '0.7rem' }}>auto · everyone</span>
+                <span style={{ display: 'block', color: '#9a6b00', fontSize: '0.7rem', fontWeight: 600 }}>auto · everyone</span>
               )}
             </button>
           ))}
@@ -97,20 +95,12 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
           Description
           <input value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        {error && <p style={{ color: '#b00020', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
+        {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-          >
+          <button type="button" onClick={onClose} className="btn btn-secondary">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={createTeam.isPending}
-            style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
-          >
+          <button type="submit" disabled={createTeam.isPending} className="btn btn-primary">
             Create team
           </button>
         </div>
@@ -133,28 +123,24 @@ function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTe
     <div>
       <h3 style={{ marginTop: 0 }}>Members</h3>
       {isSystemTeam && (
-        <p style={{ color: '#666', fontSize: '0.85rem' }}>
+        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
           This team automatically includes every active volunteer — membership can't be edited here.
         </p>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
         {members?.map((m) => (
-          <div key={m.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: 8, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+          <div key={m.userId} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem' }}>
             <span>
-              {m.user.name} <span style={{ color: '#999', fontSize: '0.8rem' }}>{m.user.email}</span>
+              {m.user.name} <span style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{m.user.email}</span>
             </span>
             {!isSystemTeam && (
-              <button
-                type="button"
-                onClick={() => leave.mutate({ teamId, userId: m.userId })}
-                style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer' }}
-              >
+              <button type="button" onClick={() => leave.mutate({ teamId, userId: m.userId })} className="btn-ghost">
                 Remove
               </button>
             )}
           </div>
         ))}
-        {members?.length === 0 && <p style={{ color: '#999' }}>No members yet.</p>}
+        {members?.length === 0 && <p style={{ color: 'var(--color-text-faint)' }}>No members yet.</p>}
       </div>
 
       {!isSystemTeam && (
@@ -174,7 +160,7 @@ function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTe
               join.mutate({ teamId, userId: addUserId });
               setAddUserId('');
             }}
-            style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+            className="btn btn-primary btn-sm"
           >
             Add
           </button>
