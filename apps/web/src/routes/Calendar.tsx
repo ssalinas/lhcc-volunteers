@@ -91,14 +91,14 @@ export default function Calendar() {
                     key={o.id}
                     type="button"
                     className="calendar-occurrence-chip"
-                    onClick={() => isAdmin && navigate(`/admin/occurrences/${o.id}`)}
+                    onClick={() => navigate(isAdmin ? `/admin/occurrences/${o.id}` : `/occurrences/${o.id}`)}
                     style={{
                       textAlign: 'left',
                       fontSize: '0.7rem',
                       padding: '0.2rem 0.35rem',
                       borderRadius: 5,
                       border: 'none',
-                      cursor: isAdmin ? 'pointer' : 'default',
+                      cursor: 'pointer',
                       background: o.isMineAssigned ? 'var(--color-primary)' : 'var(--color-primary-light)',
                       color: o.isMineAssigned ? '#fff' : 'var(--color-primary)',
                       fontFamily: 'inherit',

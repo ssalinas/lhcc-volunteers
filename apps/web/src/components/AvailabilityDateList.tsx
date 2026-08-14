@@ -22,15 +22,16 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
   const [page, setPage] = useState(0);
 
   const dates = useMemo(() => {
-    const byDate = new Map<string, Set<string>>();
+    const byDate = new Map<string, { eventNames: Set<string>; teamNames: Set<string> }>();
     for (const o of occurrences ?? []) {
       const key = format(new Date(o.startAt), 'yyyy-MM-dd');
-      const set = byDate.get(key) ?? new Set<string>();
-      set.add(o.eventName);
-      byDate.set(key, set);
+      const entry = byDate.get(key) ?? { eventNames: new Set<string>(), teamNames: new Set<string>() };
+      entry.eventNames.add(o.eventName);
+      for (const teamName of o.teamNames) entry.teamNames.add(teamName);
+      byDate.set(key, entry);
     }
     return [...byDate.entries()]
-      .map(([date, eventNames]) => ({ date, eventNames: [...eventNames] }))
+      .map(([date, { eventNames, teamNames }]) => ({ date, eventNames: [...eventNames], teamNames: [...teamNames] }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [occurrences]);
 
@@ -64,7 +65,7 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {pageDates.map(({ date, eventNames }) => {
+        {pageDates.map(({ date, eventNames, teamNames }) => {
           const status = statusByDate.get(date);
           return (
             <div
@@ -82,6 +83,11 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
               <div>
                 <div style={{ fontWeight: 600 }}>{format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}</div>
                 <div style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{eventNames.join(', ')}</div>
+                {teamNames.length > 0 && (
+                  <div style={{ color: 'var(--color-primary)', fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                    Needed: {teamNames.join(', ')}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <ToggleButton active={status === 'available'} variant="success" onClick={() => toggle(date, 'available')}>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import type { AssignmentStatus } from '@lhcc/shared';
-import { useTeams } from '../../api/hooks.js';
+import { useAdminUsers, useTeams } from '../../api/hooks.js';
 import {
   useAddAdHocRole,
   useAutoSchedule,
@@ -132,9 +132,15 @@ function AssignPicker({
   addingExtra?: boolean;
 }) {
   const { data: candidates } = useEligibleCandidates(occurrenceId, roleId);
+  const { data: allUsers } = useAdminUsers();
   const createAssignment = useCreateAssignment();
   const [selected, setSelected] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const candidateIds = new Set((candidates ?? []).map((c) => c.userId));
+  const otherActiveUsers = (allUsers ?? [])
+    .filter((u) => u.active && !candidateIds.has(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function handleAssign(force = false) {
     if (!selected) return;
@@ -163,12 +169,25 @@ function AssignPicker({
       )}
       <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ flex: 1 }}>
         <option value="">Assign a volunteer…</option>
-        {candidates?.map((c) => (
-          <option key={c.userId} value={c.userId}>
-            {c.name} {c.available ? '' : '(unavailable)'} {c.alreadyUsedInOccurrence ? '(already serving)' : ''} · served{' '}
-            {c.assignmentCountInWindow}x recently
-          </option>
-        ))}
+        {candidates && candidates.length > 0 && (
+          <optgroup label="On this team">
+            {candidates.map((c) => (
+              <option key={c.userId} value={c.userId}>
+                {c.name} {c.available ? '' : '(unavailable)'} {c.alreadyUsedInOccurrence ? '(already serving)' : ''} · served{' '}
+                {c.assignmentCountInWindow}x recently
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {otherActiveUsers.length > 0 && (
+          <optgroup label="Not on this team (override)">
+            {otherActiveUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
       <button type="button" disabled={!selected || createAssignment.isPending} onClick={() => handleAssign(false)} className="btn btn-primary btn-sm">
         Assign

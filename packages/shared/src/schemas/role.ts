@@ -5,6 +5,7 @@ export const volunteerRoleSchema = z.object({
   id: idSchema,
   eventOccurrenceId: idSchema,
   teamId: idSchema,
+  teamName: z.string(),
   name: z.string(),
   slotsCount: z.number().int().positive(),
   stackable: z.boolean(),

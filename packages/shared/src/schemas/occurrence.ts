@@ -14,6 +14,7 @@ export const occurrenceSummarySchema = z.object({
   isMineAssigned: z.boolean(),
   totalSlots: z.number().int().nonnegative(),
   filledSlots: z.number().int().nonnegative(),
+  teamNames: z.array(z.string()),
 });
 export type OccurrenceSummary = z.infer<typeof occurrenceSummarySchema>;
 

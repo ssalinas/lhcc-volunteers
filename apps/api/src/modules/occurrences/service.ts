@@ -11,7 +11,7 @@ async function loadOccurrencesWithRoles(from: Date, to: Date) {
     orderBy: (o, { asc }) => [asc(o.startAt)],
     with: {
       event: true,
-      roles: { with: { assignments: true } },
+      roles: { with: { assignments: true, team: true } },
     },
   });
 }
@@ -27,6 +27,7 @@ export async function listOccurrences(from: Date, to: Date, currentUserId?: stri
     const isMineAssigned = currentUserId
       ? o.roles.some((r) => r.assignments.some((a) => a.userId === currentUserId && a.status !== 'declined'))
       : false;
+    const teamNames = [...new Set(o.roles.map((r) => r.team.name))];
     return {
       id: o.id,
       eventId: o.eventId,
@@ -38,6 +39,7 @@ export async function listOccurrences(from: Date, to: Date, currentUserId?: stri
       isMineAssigned,
       totalSlots,
       filledSlots,
+      teamNames,
     };
   });
 }
@@ -47,7 +49,7 @@ export async function getOccurrence(id: string) {
     where: eq(eventOccurrences.id, id),
     with: {
       event: true,
-      roles: { with: { assignments: { with: { user: true } } } },
+      roles: { with: { assignments: { with: { user: true } }, team: true } },
     },
   });
   if (!occurrence) throw new NotFoundError('Occurrence not found');
