@@ -1,0 +1,22 @@
+[Unit]
+Description=LHCC Volunteers scheduling app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lhcc
+Group=lhcc
+WorkingDirectory=/opt/lhcc-volunteers
+EnvironmentFile=/opt/lhcc-volunteers/.env
+ExecStart=/usr/bin/node /opt/lhcc-volunteers/apps/api/dist/server.js
+Restart=on-failure
+RestartSec=5
+# Modest cap appropriate for a Pi; raise if the process gets OOM-killed under real load.
+MemoryMax=512M
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/lhcc-volunteers/data
+
+[Install]
+WantedBy=multi-user.target
