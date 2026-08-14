@@ -1,12 +1,76 @@
-import { Link } from 'react-router-dom';
-import { useAdminEvents, useArchiveEvent } from '../../api/hooks.js';
+import { useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { addWeeks, format } from 'date-fns';
+import { useAdminEvents, useArchiveEvent, useOccurrences } from '../../api/hooks.js';
+
+const UPCOMING_WEEKS = 8;
 
 export default function AdminEvents() {
   const { data: events, isLoading } = useAdminEvents();
   const archive = useArchiveEvent();
+  const navigate = useNavigate();
+
+  const now = useMemo(() => new Date(), []);
+  const horizon = useMemo(() => addWeeks(now, UPCOMING_WEEKS), [now]);
+  const { data: occurrences, isLoading: occurrencesLoading } = useOccurrences(now.toISOString(), horizon.toISOString());
+
+  const upcoming = [...(occurrences ?? [])]
+    .filter((o) => o.status !== 'canceled')
+    .sort((a, b) => a.startAt.localeCompare(b.startAt));
 
   return (
     <div>
+      <h1 style={{ marginBottom: '0.5rem' }}>Upcoming Occurrences</h1>
+      <p style={{ marginTop: 0, color: '#666' }}>Next {UPCOMING_WEEKS} weeks — click one to schedule volunteers.</p>
+
+      {occurrencesLoading ? (
+        <p>Loading…</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '2.5rem' }}>
+          {upcoming.map((o) => {
+            const fullyStaffed = o.totalSlots > 0 && o.filledSlots >= o.totalSlots;
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => navigate(`/admin/occurrences/${o.id}`)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.75rem 1rem',
+                  background: '#fff',
+                  borderRadius: 8,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span>
+                  <strong>{o.eventName}</strong>{' '}
+                  <span style={{ color: '#666', fontSize: '0.85rem' }}>{format(new Date(o.startAt), 'EEE, MMM d · p')}</span>
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: 999,
+                    background: fullyStaffed ? '#e6f0ea' : '#fdecc8',
+                    color: fullyStaffed ? '#2f6f4f' : '#8a6d00',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {o.totalSlots === 0 ? 'No roles' : fullyStaffed ? 'Fully staffed' : `Needs volunteers (${o.filledSlots}/${o.totalSlots})`}
+                </span>
+              </button>
+            );
+          })}
+          {upcoming.length === 0 && <p>No upcoming occurrences in the next {UPCOMING_WEEKS} weeks.</p>}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1 style={{ margin: 0 }}>Events</h1>
         <Link

@@ -9,6 +9,7 @@ function toTeamDto(t: {
   name: string;
   description: string | null;
   active: boolean;
+  isSystemTeam: boolean;
   createdAt: Date;
   memberCount: number;
   isMember?: boolean;
@@ -18,6 +19,7 @@ function toTeamDto(t: {
     name: t.name,
     description: t.description,
     active: t.active,
+    isSystemTeam: t.isSystemTeam,
     createdAt: t.createdAt.toISOString(),
     memberCount: t.memberCount,
     isMember: t.isMember,

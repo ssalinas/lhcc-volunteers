@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Modal } from '../../components/Modal.js';
 import {
   useAdminUsers,
   useCreateTeam,
@@ -10,39 +11,23 @@ import {
 
 export default function AdminTeams() {
   const { data: teams } = useTeams();
-  const createTeam = useCreateTeam();
   const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-
-  function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    createTeam.mutate(
-      { name, description: description || undefined },
-      { onSuccess: () => { setName(''); setDescription(''); } },
-    );
-  }
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   return (
     <div>
-      <h1>Manage Teams</h1>
-
-      <form
-        onSubmit={handleCreate}
-        style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '1.5rem', background: '#fff', padding: '1rem', borderRadius: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }}
-      >
-        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.85rem' }}>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.85rem' }}>
-          Description
-          <input value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        <button type="submit" style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer', height: 38 }}>
-          Create team
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h1 style={{ margin: 0 }}>Manage Teams</h1>
+        <button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+        >
+          + New team
         </button>
-      </form>
+      </div>
+
+      {showCreateModal && <CreateTeamModal onClose={() => setShowCreateModal(false)} />}
 
       <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
         <div style={{ minWidth: 220 }}>
@@ -64,19 +49,77 @@ export default function AdminTeams() {
               }}
             >
               {team.name} <span style={{ color: '#999', fontSize: '0.8rem' }}>({team.memberCount})</span>
+              {team.isSystemTeam && (
+                <span style={{ display: 'block', color: '#8a6d00', fontSize: '0.7rem' }}>auto · everyone</span>
+              )}
             </button>
           ))}
         </div>
 
         <div style={{ flex: 1, minWidth: 280 }}>
-          {selectedTeamId ? <TeamMembersPanel teamId={selectedTeamId} /> : <p>Select a team to manage its members.</p>}
+          {selectedTeamId ? (
+            <TeamMembersPanel teamId={selectedTeamId} isSystemTeam={teams?.find((t) => t.id === selectedTeamId)?.isSystemTeam ?? false} />
+          ) : (
+            <p>Select a team to manage its members.</p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function TeamMembersPanel({ teamId }: { teamId: string }) {
+function CreateTeamModal({ onClose }: { onClose: () => void }) {
+  const createTeam = useCreateTeam();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    createTeam.mutate(
+      { name, description: description || undefined },
+      {
+        onSuccess: () => onClose(),
+        onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create team'),
+      },
+    );
+  }
+
+  return (
+    <Modal title="New team" onClose={onClose}>
+      <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.85rem' }}>
+          Name
+          <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.85rem' }}>
+          Description
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        {error && <p style={{ color: '#b00020', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={createTeam.isPending}
+            style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+          >
+            Create team
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTeam: boolean }) {
   const { data: members } = useTeamMembers(teamId);
   const { data: users } = useAdminUsers();
   const join = useJoinTeam();
@@ -89,45 +132,54 @@ function TeamMembersPanel({ teamId }: { teamId: string }) {
   return (
     <div>
       <h3 style={{ marginTop: 0 }}>Members</h3>
+      {isSystemTeam && (
+        <p style={{ color: '#666', fontSize: '0.85rem' }}>
+          This team automatically includes every active volunteer — membership can't be edited here.
+        </p>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
         {members?.map((m) => (
           <div key={m.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: 8, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
             <span>
               {m.user.name} <span style={{ color: '#999', fontSize: '0.8rem' }}>{m.user.email}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => leave.mutate({ teamId, userId: m.userId })}
-              style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer' }}
-            >
-              Remove
-            </button>
+            {!isSystemTeam && (
+              <button
+                type="button"
+                onClick={() => leave.mutate({ teamId, userId: m.userId })}
+                style={{ border: 'none', background: 'transparent', color: '#999', cursor: 'pointer' }}
+              >
+                Remove
+              </button>
+            )}
           </div>
         ))}
         {members?.length === 0 && <p style={{ color: '#999' }}>No members yet.</p>}
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <select value={addUserId} onChange={(e) => setAddUserId(e.target.value)} style={{ flex: 1 }}>
-          <option value="">Add a user…</option>
-          {addableUsers.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name} ({u.email})
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={!addUserId}
-          onClick={() => {
-            join.mutate({ teamId, userId: addUserId });
-            setAddUserId('');
-          }}
-          style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
-        >
-          Add
-        </button>
-      </div>
+      {!isSystemTeam && (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <select value={addUserId} onChange={(e) => setAddUserId(e.target.value)} style={{ flex: 1 }}>
+            <option value="">Add a user…</option>
+            {addableUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.email})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!addUserId}
+            onClick={() => {
+              join.mutate({ teamId, userId: addUserId });
+              setAddUserId('');
+            }}
+            style={{ padding: '0.5rem 1rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+          >
+            Add
+          </button>
+        </div>
+      )}
     </div>
   );
 }

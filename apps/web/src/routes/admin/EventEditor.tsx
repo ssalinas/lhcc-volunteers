@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import type { CreateEventRoleTemplateInput } from '@lhcc/shared';
+import { Modal } from '../../components/Modal.js';
 import { useTeams } from '../../api/hooks.js';
 import {
   useAddRoleTemplate,
@@ -51,6 +52,8 @@ export default function AdminEventEditor() {
   const [occurrenceDate, setOccurrenceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [regenerateAfterSave, setRegenerateAfterSave] = useState(false);
 
   useEffect(() => {
     if (!existingEvent) return;
@@ -80,6 +83,11 @@ export default function AdminEventEditor() {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setShowConfirm(true);
+  }
+
+  function handleConfirmSave() {
+    setError(null);
 
     if (isEditing && eventId) {
       updateEvent.mutate(
@@ -87,7 +95,13 @@ export default function AdminEventEditor() {
           id: eventId,
           input: { name, description, location, defaultStartTime, defaultDurationMinutes, timezone, recurrenceEndDate: recurrenceEndDate || null },
         },
-        { onError: (err) => setError(err instanceof Error ? err.message : 'Failed to save') },
+        {
+          onSuccess: () => {
+            setShowConfirm(false);
+            if (regenerateAfterSave) regenerate.mutate(eventId);
+          },
+          onError: (err) => setError(err instanceof Error ? err.message : 'Failed to save'),
+        },
       );
       return;
     }
@@ -110,7 +124,10 @@ export default function AdminEventEditor() {
         };
 
     createEvent.mutate(payload, {
-      onSuccess: (created) => navigate(`/admin/events/${created.id}`),
+      onSuccess: (created) => {
+        setShowConfirm(false);
+        navigate(`/admin/events/${created.id}`);
+      },
       onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create event'),
     });
   }
@@ -236,23 +253,69 @@ export default function AdminEventEditor() {
           )}
         </div>
 
-        {error && <p style={{ color: '#b00020' }}>{error}</p>}
+        {error && !showConfirm && <p style={{ color: '#b00020' }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}>
             {isEditing ? 'Save changes' : 'Create event'}
           </button>
-          {isEditing && existingEvent?.isRecurring && (
-            <button
-              type="button"
-              onClick={() => eventId && regenerate.mutate(eventId)}
-              style={{ padding: '0.6rem 1.5rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
-            >
-              Regenerate future occurrences
-            </button>
-          )}
         </div>
       </form>
+
+      {showConfirm && (
+        <Modal title={isEditing ? 'Save changes?' : 'Create this event?'} onClose={() => setShowConfirm(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <p style={{ margin: 0 }}>
+              {isEditing ? (
+                <>
+                  Save changes to <strong>{name}</strong>?
+                </>
+              ) : (
+                <>
+                  Create <strong>{name || 'this event'}</strong>{' '}
+                  {isRecurring ? `repeating weekly on ${WEEKDAYS.find((w) => w.value === weekday)?.label}s` : `on ${occurrenceDate}`}?
+                </>
+              )}
+            </p>
+
+            {isEditing && existingEvent?.isRecurring && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.9rem' }}>
+                <input
+                  type="checkbox"
+                  checked={regenerateAfterSave}
+                  onChange={(e) => setRegenerateAfterSave(e.target.checked)}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  Also regenerate future occurrences now — adds any newly-valid dates and removes future,
+                  unassigned occurrences that no longer match. Occurrences with existing assignments are never
+                  touched.
+                </span>
+              </label>
+            )}
+
+            {error && <p style={{ color: '#b00020', margin: 0 }}>{error}</p>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                disabled={createEvent.isPending || updateEvent.isPending}
+                style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', background: '#2f6f4f', color: '#fff', cursor: 'pointer' }}
+              >
+                {isEditing ? 'Save' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

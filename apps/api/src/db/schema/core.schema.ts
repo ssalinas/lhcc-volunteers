@@ -15,6 +15,10 @@ export const teams = sqliteTable('teams', {
   name: text('name').notNull().unique(),
   description: text('description'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  // System teams (currently just the auto-provisioned "All Volunteers" team) have no real
+  // team_memberships rows — every active user is implicitly a member. See
+  // modules/scheduling/fairness.ts and jobs/ensureSystemTeams.ts.
+  isSystemTeam: integer('is_system_team', { mode: 'boolean' }).notNull().default(false),
   ...timestamps,
 });
 

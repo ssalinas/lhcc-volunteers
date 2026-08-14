@@ -1,7 +1,7 @@
 import { eq, inArray, and, ne } from 'drizzle-orm';
 import { subWeeks } from 'date-fns';
 import { db } from '../../db/client.js';
-import { assignments, volunteerRoles, eventOccurrences, teamMemberships } from '../../db/schema/core.schema.js';
+import { assignments, volunteerRoles, eventOccurrences, teamMemberships, teams } from '../../db/schema/core.schema.js';
 import { user } from '../../db/schema/auth.schema.js';
 import { toUtcDateOnly } from '../../lib/dates.js';
 import { isUserAvailableOn } from '../availability/service.js';
@@ -38,11 +38,15 @@ export async function getFairnessRankedCandidates(
   occurrenceId: string,
   occurrenceDate: Date,
 ): Promise<FairnessCandidate[]> {
-  const members = await db
-    .select({ userId: teamMemberships.userId, name: user.name, email: user.email, active: user.active })
-    .from(teamMemberships)
-    .innerJoin(user, eq(user.id, teamMemberships.userId))
-    .where(eq(teamMemberships.teamId, teamId));
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
+
+  const members = team?.isSystemTeam
+    ? await db.select({ userId: user.id, name: user.name, email: user.email, active: user.active }).from(user)
+    : await db
+        .select({ userId: teamMemberships.userId, name: user.name, email: user.email, active: user.active })
+        .from(teamMemberships)
+        .innerJoin(user, eq(user.id, teamMemberships.userId))
+        .where(eq(teamMemberships.teamId, teamId));
 
   const activeMembers = members.filter((m) => m.active);
   if (activeMembers.length === 0) return [];

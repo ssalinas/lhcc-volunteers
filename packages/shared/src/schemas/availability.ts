@@ -11,14 +11,9 @@ export const availabilityEntrySchema = z.object({
 });
 export type AvailabilityEntry = z.infer<typeof availabilityEntrySchema>;
 
-export const upsertAvailabilitySchema = z
-  .object({
-    startDate: z.string().date(),
-    endDate: z.string().date(),
-    status: availabilityStatusEnum.default('available'),
-  })
-  .refine((v) => v.endDate >= v.startDate, {
-    message: 'endDate must be on or after startDate',
-    path: ['endDate'],
-  });
-export type UpsertAvailabilityInput = z.infer<typeof upsertAvailabilitySchema>;
+// Availability is set per specific upcoming date (checkbox-style), not a freeform
+// date range — this keeps "available" / "unavailable" / "hasn't responded" distinguishable.
+export const setAvailabilityStatusSchema = z.object({
+  status: availabilityStatusEnum,
+});
+export type SetAvailabilityStatusInput = z.infer<typeof setAvailabilityStatusSchema>;

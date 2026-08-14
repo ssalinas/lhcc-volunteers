@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AutoScheduleResult,
   AvailabilityEntry,
+  AvailabilityStatus,
   CoverageGapEntry,
   CreateAssignmentInput,
   CreateEventInput,
@@ -20,7 +21,6 @@ import type {
   UpdateOccurrenceInput,
   UpdateTeamInput,
   UpdateUserInput,
-  UpsertAvailabilityInput,
   UserSummary,
   VolunteerHistoryEntry,
 } from '@lhcc/shared';
@@ -82,27 +82,35 @@ export function useLeaveTeam() {
 }
 
 // ---------- Availability ----------
+// `userId` omitted = the current user (/api/availability/me/*); passing a userId
+// switches to the admin-only /api/availability/:userId/* endpoints so the same
+// hooks/component can power both the self-service and admin-editing views.
 
-export function useMyAvailability() {
+function availabilityBasePath(userId?: string) {
+  return userId ? `/api/availability/${userId}` : '/api/availability/me';
+}
+
+export function useAvailabilityFor(userId?: string) {
   return useQuery({
-    queryKey: ['availability', 'me'],
-    queryFn: () => api.get<AvailabilityEntry[]>('/api/availability/me'),
+    queryKey: ['availability', userId ?? 'me'],
+    queryFn: () => api.get<AvailabilityEntry[]>(userId ? `/api/availability/${userId}` : '/api/availability/me'),
   });
 }
 
-export function useAddAvailability() {
+export function useSetAvailabilityForDate(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: UpsertAvailabilityInput) => api.put<AvailabilityEntry>('/api/availability/me', input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', 'me'] }),
+    mutationFn: ({ date, status }: { date: string; status: AvailabilityStatus }) =>
+      api.put<AvailabilityEntry>(`${availabilityBasePath(userId)}/dates/${date}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
   });
 }
 
-export function useDeleteAvailability() {
+export function useClearAvailabilityForDate(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/api/availability/me/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', 'me'] }),
+    mutationFn: (date: string) => api.delete(`${availabilityBasePath(userId)}/dates/${date}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
   });
 }
 

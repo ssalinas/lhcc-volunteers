@@ -4,9 +4,12 @@ import { buildApp } from './app.js';
 import { env } from './config/env.js';
 import { generateAllOccurrences } from './jobs/generateOccurrences.js';
 import { runDatabaseBackup } from './jobs/backupDb.js';
+import { ensureSystemTeams } from './jobs/ensureSystemTeams.js';
 
 async function main() {
   const app = await buildApp();
+
+  await ensureSystemTeams();
 
   const { eventsProcessed, occurrencesCreated } = await generateAllOccurrences();
   app.log.info({ eventsProcessed, occurrencesCreated }, 'Generated recurring event occurrences on boot');
