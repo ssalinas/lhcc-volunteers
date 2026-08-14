@@ -1,0 +1,52 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #1a1a1a;
+  background: #fafafa;
+  -webkit-text-size-adjust: 100%;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  main {
+    padding: 1rem !important;
+  }
+
+  h1 {
+    font-size: 1.5rem !important;
+  }
+
+  h2 {
+    font-size: 1.15rem !important;
+  }
+
+  /* Calendar month grid: same day cells, but tighter so a phone doesn't scroll horizontally */
+  .calendar-grid {
+    gap: 2px !important;
+  }
+
+  .calendar-day-cell {
+    min-height: 64px !important;
+    padding: 0.2rem !important;
+  }
+
+  .calendar-occurrence-chip {
+    font-size: 0.62rem !important;
+    padding: 0.15rem 0.25rem !important;
+  }
+
+  .calendar-weekday-label {
+    font-size: 0.65rem !important;
+  }
+}
