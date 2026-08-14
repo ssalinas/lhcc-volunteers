@@ -64,19 +64,30 @@ the email/password login form is available, which is enough to develop and test 
 ## How scheduling works
 
 - Volunteers join **teams** (Greeters, Ushers, Worship Band, ...) themselves, or an admin adds them.
-- Volunteers mark date ranges as **available**; any date not explicitly marked available is treated
-  as unavailable for scheduling purposes.
+  There's also an auto-provisioned **"All Volunteers" system team** that always includes every active
+  user (no real membership rows — see `jobs/ensureSystemTeams.ts` and `modules/scheduling/fairness.ts`)
+  — assign a role to it when it can be filled by anyone rather than a specific team.
+- Volunteers mark **availability per upcoming date** (a checkbox list of the next ~2 months of
+  occurrence dates, not a freeform calendar) — this is what lets the app tell "said unavailable"
+  apart from "hasn't responded yet"; a date with neither is treated as unavailable for scheduling.
+  Admins can edit this on a volunteer's behalf from the Users page (same date-list component).
 - Admins create **events** — one-off (a single date) or recurring (an RRULE + start time + timezone,
   e.g. "every Sunday at 9am"). Recurring events materialize into concrete **occurrences** up to
-  `OCCURRENCE_HORIZON_WEEKS` (default 8) ahead, via a job that runs on boot and nightly.
-- Each occurrence has **roles** (e.g. "Greeter", 2 slots, tied to the Greeters team), either copied
-  from the event's role templates or added ad hoc to a single occurrence.
+  `OCCURRENCE_HORIZON_WEEKS` (default 8) ahead, via a job that runs on boot and nightly. Saving an
+  event shows a confirmation dialog; editing a recurring event's dialog includes a checkbox to
+  regenerate future occurrences immediately (adds newly-valid dates, drops future unassigned ones
+  that no longer match — never touches an occurrence with existing assignments).
+- Each occurrence has **roles** (e.g. "Greeter", 2 slots, tied to a team), either copied from the
+  event's role templates or added ad hoc to a single occurrence. The admin Events page lists
+  upcoming occurrences with a fully-staffed/needs-volunteers badge so you can jump straight to
+  scheduling one.
 - **Auto-schedule** (per occurrence) fills unfilled role slots by ranking each team's available
   members by how little they've served in the last `FAIRNESS_LOOKBACK_WEEKS` (default 6) — least-
   recently/least-often-served first. A volunteer can't hold two roles in the same occurrence unless
   the role is flagged **stackable**, and even then fresh (unused-that-occurrence) volunteers are
   preferred first. It's idempotent — safe to re-run after manual edits, it only fills gaps.
-- Admins can override any assignment by hand from the occurrence detail screen.
+- Admins can override any assignment by hand from the occurrence detail screen, including adding
+  volunteers beyond a role's normal slot count when extra coverage is wanted.
 
 ## Deploying to a Raspberry Pi
 

@@ -9,12 +9,14 @@ export default function Teams() {
 
   if (isLoading) return <p>Loading teams…</p>;
 
+  const joinableTeams = teams?.filter((t) => !t.isSystemTeam);
+
   return (
     <div>
       <h1>Teams</h1>
       <p>Join the teams you volunteer with. You'll only be considered for scheduling on teams you belong to.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
-        {teams?.map((team) => (
+        {joinableTeams?.map((team) => (
           <div
             key={team.id}
             style={{
@@ -53,7 +55,7 @@ export default function Teams() {
             )}
           </div>
         ))}
-        {teams?.length === 0 && <p>No teams have been created yet — check back soon.</p>}
+        {joinableTeams?.length === 0 && <p>No teams have been created yet — check back soon.</p>}
       </div>
     </div>
   );

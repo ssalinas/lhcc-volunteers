@@ -85,6 +85,7 @@ function RoleCard({
   const deleteAssignment = useDeleteAssignment();
   const activeAssignments = role.assignments.filter((a) => a.status !== 'declined');
   const isFull = activeAssignments.length >= role.slotsCount;
+  const isOverStaffed = activeAssignments.length > role.slotsCount;
 
   return (
     <div style={{ background: '#fff', borderRadius: 10, padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }}>
@@ -92,8 +93,8 @@ function RoleCard({
         <strong>
           {role.name} {role.stackable && <span style={{ fontWeight: 400, color: '#999', fontSize: '0.8rem' }}>(stackable)</span>}
         </strong>
-        <span style={{ color: '#666', fontSize: '0.85rem' }}>
-          {activeAssignments.length}/{role.slotsCount} filled
+        <span style={{ color: isFull ? '#2f6f4f' : '#8a6d00', fontSize: '0.85rem' }}>
+          {activeAssignments.length}/{role.slotsCount} filled{isOverStaffed ? ' (extra added)' : ''}
         </span>
       </div>
       <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -114,7 +115,7 @@ function RoleCard({
         {role.assignments.length === 0 && <span style={{ color: '#999', fontSize: '0.85rem' }}>No one assigned yet.</span>}
       </div>
 
-      {!isFull && <AssignPicker occurrenceId={occurrenceId} roleId={role.id} />}
+      <AssignPicker occurrenceId={occurrenceId} roleId={role.id} addingExtra={isFull} />
     </div>
   );
 }
@@ -129,7 +130,15 @@ function StatusBadge({ status }: { status: AssignmentStatus }) {
   return <span style={{ color: colors[status], fontSize: '0.75rem' }}>({status})</span>;
 }
 
-function AssignPicker({ occurrenceId, roleId }: { occurrenceId: string; roleId: string }) {
+function AssignPicker({
+  occurrenceId,
+  roleId,
+  addingExtra,
+}: {
+  occurrenceId: string;
+  roleId: string;
+  addingExtra?: boolean;
+}) {
   const { data: candidates } = useEligibleCandidates(occurrenceId, roleId);
   const createAssignment = useCreateAssignment();
   const [selected, setSelected] = useState('');
@@ -157,6 +166,9 @@ function AssignPicker({ occurrenceId, roleId }: { occurrenceId: string; roleId: 
 
   return (
     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', alignItems: 'center' }}>
+      {addingExtra && (
+        <span style={{ fontSize: '0.75rem', color: '#8a6d00', whiteSpace: 'nowrap' }}>Add extra:</span>
+      )}
       <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ flex: 1 }}>
         <option value="">Assign a volunteer…</option>
         {candidates?.map((c) => (

@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import type { UserRole } from '@lhcc/shared';
+import { AvailabilityDateList } from '../../components/AvailabilityDateList.js';
 import { useAdminUsers, useCreateUser, useUpdateUser } from '../../api/hooks.js';
 
 export default function AdminUsers() {
   const { data: users, isLoading } = useAdminUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
+  const [availabilityUserId, setAvailabilityUserId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -97,10 +99,29 @@ export default function AdminUsers() {
                     onChange={(e) => updateUser.mutate({ id: u.id, input: { active: e.target.checked } })}
                   />
                 </td>
+                <td style={{ padding: '0.6rem 0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityUserId(availabilityUserId === u.id ? null : u.id)}
+                    style={{ padding: '0.3rem 0.75rem', borderRadius: 6, border: '1px solid #ccc', background: availabilityUserId === u.id ? '#e6f0ea' : '#fff', cursor: 'pointer', fontSize: '0.85rem' }}
+                  >
+                    {availabilityUserId === u.id ? 'Hide availability' : 'Edit availability'}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {availabilityUserId && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <h2>{users?.find((u) => u.id === availabilityUserId)?.name}'s availability</h2>
+          <p style={{ color: '#666', fontSize: '0.9rem' }}>
+            Useful for volunteers who forgot to respond or aren't comfortable using the app themselves.
+          </p>
+          <AvailabilityDateList userId={availabilityUserId} />
+        </div>
       )}
     </div>
   );

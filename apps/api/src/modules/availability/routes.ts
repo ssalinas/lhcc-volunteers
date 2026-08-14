@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { upsertAvailabilitySchema, idSchema } from '@lhcc/shared';
+import { setAvailabilityStatusSchema, idSchema } from '@lhcc/shared';
 import { requireAdmin, requireAuth } from '../../auth/plugin.js';
 import * as availabilityService from './service.js';
 
@@ -15,6 +15,8 @@ function toDto(e: { id: string; userId: string; startDate: string; endDate: stri
   };
 }
 
+const dateParam = z.object({ date: z.string().date() });
+
 export const availabilityRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get('/api/availability/me', async (request) => {
     const session = await requireAuth(request);
@@ -23,22 +25,25 @@ export const availabilityRoutes: FastifyPluginAsyncZod = async (app) => {
   });
 
   app.put(
-    '/api/availability/me',
-    { schema: { body: upsertAvailabilitySchema } },
-    async (request, reply) => {
+    '/api/availability/me/dates/:date',
+    { schema: { params: dateParam, body: setAvailabilityStatusSchema } },
+    async (request) => {
       const session = await requireAuth(request);
-      const created = await availabilityService.createEntry(session.user.id, request.body);
-      reply.status(201);
-      return toDto(created);
+      const updated = await availabilityService.setAvailabilityForDate(
+        session.user.id,
+        request.params.date,
+        request.body.status,
+      );
+      return toDto(updated);
     },
   );
 
   app.delete(
-    '/api/availability/me/:id',
-    { schema: { params: z.object({ id: idSchema }) } },
+    '/api/availability/me/dates/:date',
+    { schema: { params: dateParam } },
     async (request, reply) => {
       const session = await requireAuth(request);
-      await availabilityService.deleteEntry(session.user.id, request.params.id);
+      await availabilityService.clearAvailabilityForDate(session.user.id, request.params.date);
       reply.status(204);
     },
   );
@@ -50,6 +55,30 @@ export const availabilityRoutes: FastifyPluginAsyncZod = async (app) => {
       await requireAdmin(request);
       const entries = await availabilityService.listForUser(request.params.userId);
       return entries.map(toDto);
+    },
+  );
+
+  app.put(
+    '/api/availability/:userId/dates/:date',
+    { schema: { params: z.object({ userId: idSchema, date: z.string().date() }), body: setAvailabilityStatusSchema } },
+    async (request) => {
+      await requireAdmin(request);
+      const updated = await availabilityService.setAvailabilityForDate(
+        request.params.userId,
+        request.params.date,
+        request.body.status,
+      );
+      return toDto(updated);
+    },
+  );
+
+  app.delete(
+    '/api/availability/:userId/dates/:date',
+    { schema: { params: z.object({ userId: idSchema, date: z.string().date() }) } },
+    async (request, reply) => {
+      await requireAdmin(request);
+      await availabilityService.clearAvailabilityForDate(request.params.userId, request.params.date);
+      reply.status(204);
     },
   );
 };

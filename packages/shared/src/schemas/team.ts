@@ -7,6 +7,7 @@ export const teamSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   active: z.boolean(),
+  isSystemTeam: z.boolean(),
   createdAt: z.string().datetime(),
 });
 export type Team = z.infer<typeof teamSchema>;

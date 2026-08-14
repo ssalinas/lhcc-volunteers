@@ -1,0 +1,1 @@
+ALTER TABLE `teams` ADD `is_system_team` integer DEFAULT false NOT NULL;
