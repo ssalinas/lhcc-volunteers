@@ -5,6 +5,7 @@ import Login from './routes/Login.js';
 import Calendar from './routes/Calendar.js';
 import Availability from './routes/Availability.js';
 import Teams from './routes/Teams.js';
+import OccurrenceView from './routes/OccurrenceView.js';
 import AdminEvents from './routes/admin/Events.js';
 import AdminEventEditor from './routes/admin/EventEditor.js';
 import AdminOccurrenceDetail from './routes/admin/OccurrenceDetail.js';
@@ -43,6 +44,16 @@ export default function App() {
           <RequireAuth>
             <AppLayout>
               <Teams />
+            </AppLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/occurrences/:occurrenceId"
+        element={
+          <RequireAuth>
+            <AppLayout>
+              <OccurrenceView />
             </AppLayout>
           </RequireAuth>
         }
