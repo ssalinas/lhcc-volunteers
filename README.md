@@ -123,8 +123,21 @@ the email/password login form is available, which is enough to develop and test 
 6. **Backups.** A nightly job (2am) backs up the SQLite database into
    `apps/api/data/backups/` (last 14 kept) using `better-sqlite3`'s `.backup()` API, which is safe
    to run against a live database in WAL mode. Since SD card failure is the most common Pi failure
-   mode, sync that backups directory off the Pi too (rsync to a NAS, cloud object storage, etc.) —
-   that part isn't automated here.
+   mode, set up the off-Pi copy below too — an admin can also see the last backup time and trigger
+   one immediately from **Reports** in the app.
+
+   **Off-Pi backup to Cloudflare R2 (optional but recommended):**
+   1. In the Cloudflare dashboard: **R2 Object Storage → Create bucket** (e.g. `lhcc-volunteers-backups`).
+      Note the **Account ID** shown on the R2 overview page.
+   2. **R2 → Manage R2 API Tokens → Create API Token**, permission **Object Read & Write**, scoped
+      to just that bucket. Save the Access Key ID and Secret Access Key it gives you — the secret
+      is only shown once.
+   3. Add to `.env`: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`
+      (see `.env.example`). No bucket endpoint URL to configure — it's derived from the account ID.
+   4. Restart the service. From then on, every nightly (and manually-triggered) backup also uploads
+      to the bucket and prunes it down to the last `R2_BACKUP_RETENTION_COUNT` (default 5).
+
+   Leaving the R2 variables unset is fine — backups stay local-only, same as before.
 
 ### Updating a deployed instance
 

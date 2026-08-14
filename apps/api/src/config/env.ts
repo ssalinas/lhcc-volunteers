@@ -18,6 +18,14 @@ const envSchema = z.object({
   OCCURRENCE_HORIZON_WEEKS: z.coerce.number().int().positive().default(8),
   FAIRNESS_LOOKBACK_WEEKS: z.coerce.number().int().positive().default(6),
 
+  // Off-Pi nightly backup upload to Cloudflare R2 — optional. When unset, backups stay
+  // local-only (as before). See README for how to create the bucket + API token.
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_BACKUP_RETENTION_COUNT: z.coerce.number().int().positive().default(5),
+
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
   SEED_ADMIN_NAME: z.string().optional(),
