@@ -3,6 +3,7 @@ import type {
   AutoScheduleResult,
   AvailabilityEntry,
   AvailabilityStatus,
+  BackupStatus,
   CoverageGapEntry,
   CreateAssignmentInput,
   CreateEventInput,
@@ -14,6 +15,7 @@ import type {
   Event,
   OccurrenceDetail,
   OccurrenceSummary,
+  RunBackupResult,
   TeamMember,
   TeamSummaryEntry,
   TeamWithMemberCount,
@@ -314,5 +316,22 @@ export function useAutoSchedule() {
       qc.invalidateQueries({ queryKey: ['occurrences', 'detail', occurrenceId] });
       qc.invalidateQueries({ queryKey: ['occurrences'] });
     },
+  });
+}
+
+// ---------- Backups ----------
+
+export function useBackupStatus() {
+  return useQuery({
+    queryKey: ['admin', 'backups'],
+    queryFn: () => api.get<BackupStatus>('/api/admin/backups'),
+  });
+}
+
+export function useTriggerBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<RunBackupResult>('/api/admin/backups/run'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'backups'] }),
   });
 }

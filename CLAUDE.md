@@ -59,9 +59,11 @@ frontend hook together.
 ### API structure (`apps/api/src`)
 
 - `modules/<domain>/{routes.ts,service.ts}` — one pair per domain (assignments, availability,
-  events, occurrences, reports, scheduling, teams, users). `routes.ts` handles auth/validation and
-  DTO shaping; `service.ts` holds the Drizzle queries. Admin-only routes call `requireAdmin(request)`
-  from `auth/plugin.ts`; anyone-authenticated routes call `requireAuth(request)`.
+  backups, events, occurrences, reports, scheduling, teams, users). `routes.ts` handles
+  auth/validation and DTO shaping; `service.ts` holds the Drizzle queries (or, for `backups`, calls
+  into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB table backing it). Admin-only
+  routes call `requireAdmin(request)` from `auth/plugin.ts`; anyone-authenticated routes call
+  `requireAuth(request)`.
 - `db/schema/auth.schema.ts` — hand-written to match what `@better-auth/cli generate` would produce
   (user/session/account/verification), extended with better-auth's `additionalFields` (`role`,
   `phone`, `active` on `user`). These additionalFields **are** returned directly on
@@ -73,8 +75,11 @@ frontend hook together.
   `/api/auth/*`. It also decorates every request with `request.session` up front.
 - `jobs/` — `generateOccurrences.ts` (materializes recurring events into dated `event_occurrences`,
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
-  SQLite backup). All three run once on boot and then on a schedule via `node-cron`, wired in
-  `server.ts`.
+  SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the
+  bucket to the last `R2_BACKUP_RETENTION_COUNT` when `R2_*` env vars are set — optional, no-ops
+  otherwise). All three run once on boot and then on a schedule via `node-cron`, wired in
+  `server.ts`. `runDatabaseBackup()` is also called directly (not through cron) by
+  `POST /api/admin/backups/run`, so admins can trigger an immediate backup from the Reports page.
 - `modules/scheduling/fairness.ts` + `autoSchedule.ts` — the fairness ranking and greedy auto-fill
   algorithm; also reused by the manual "assign a volunteer" dropdown (`GET
   /api/occurrences/:id/eligible-candidates`) so manual picks are fairness-ordered too.

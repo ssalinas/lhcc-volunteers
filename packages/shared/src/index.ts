@@ -7,3 +7,4 @@ export * from './schemas/role.js';
 export * from './schemas/occurrence.js';
 export * from './schemas/assignment.js';
 export * from './schemas/report.js';
+export * from './schemas/backup.js';

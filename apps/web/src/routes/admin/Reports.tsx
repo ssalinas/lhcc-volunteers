@@ -1,7 +1,13 @@
-import { useMemo } from 'react';
-import { addWeeks, format } from 'date-fns';
+import { useMemo, useState } from 'react';
+import { addWeeks, format, formatDistanceToNow } from 'date-fns';
 import { StackedBarChart, type StackedBarDatum } from '../../components/StackedBarChart.js';
-import { useCoverageReport, useTeamSummaryReport, useVolunteerHistoryReport } from '../../api/hooks.js';
+import {
+  useBackupStatus,
+  useCoverageReport,
+  useTeamSummaryReport,
+  useTriggerBackup,
+  useVolunteerHistoryReport,
+} from '../../api/hooks.js';
 
 const COLORS = ['#0a7dcd', '#e6a100', '#2e7d5b', '#6bb0e8', '#c0392b'];
 
@@ -33,6 +39,11 @@ export default function AdminReports() {
   return (
     <div>
       <h1>Reports</h1>
+
+      <section style={{ marginBottom: '2rem' }}>
+        <h2>Backups</h2>
+        <BackupsCard />
+      </section>
 
       <section style={{ marginBottom: '2rem' }}>
         <h2>Team activity (last 8 weeks)</h2>
@@ -91,6 +102,64 @@ export default function AdminReports() {
           {gaps?.length === 0 && <p>No gaps — everything's staffed for the next 8 weeks.</p>}
         </div>
       </section>
+    </div>
+  );
+}
+
+function BackupsCard() {
+  const { data: status, isLoading } = useBackupStatus();
+  const triggerBackup = useTriggerBackup();
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (isLoading) return <p>Loading…</p>;
+
+  const latestLocal = status?.local[0];
+  const latestR2 = status?.r2[0];
+  const isSynced = !!latestLocal && !!latestR2 && latestLocal.name === latestR2.name;
+
+  function handleRunNow() {
+    setMessage(null);
+    triggerBackup.mutate(undefined, {
+      onSuccess: (result) =>
+        setMessage(
+          result.uploadedToR2
+            ? 'Backup complete and synced to Cloudflare R2.'
+            : 'Backup complete (local only — R2 not configured or the upload failed; check server logs).',
+        ),
+      onError: (err) => setMessage(err instanceof Error ? err.message : 'Backup failed'),
+    });
+  }
+
+  return (
+    <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <div>
+        {latestLocal ? (
+          <>
+            <div style={{ fontWeight: 600 }}>
+              Last backup {formatDistanceToNow(new Date(latestLocal.createdAt), { addSuffix: true })}
+            </div>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>
+              {format(new Date(latestLocal.createdAt), 'PPPp')} · {status?.local.length} local ·{' '}
+              {status?.r2.length ?? 0} in R2
+            </div>
+          </>
+        ) : (
+          <div style={{ color: 'var(--color-text-muted)' }}>No backups yet.</div>
+        )}
+        {message && <div style={{ fontSize: '0.85rem', marginTop: '0.4rem' }}>{message}</div>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        {!status?.r2Configured ? (
+          <span className="badge badge-warning">Off-Pi backup not configured</span>
+        ) : isSynced ? (
+          <span className="badge badge-success">Synced to Cloudflare R2</span>
+        ) : (
+          <span className="badge badge-warning">Not yet synced</span>
+        )}
+        <button type="button" onClick={handleRunNow} disabled={triggerBackup.isPending} className="btn btn-primary btn-sm">
+          {triggerBackup.isPending ? 'Backing up…' : 'Back up now'}
+        </button>
+      </div>
     </div>
   );
 }
