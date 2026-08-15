@@ -91,15 +91,61 @@ the email/password login form is available, which is enough to develop and test 
 
 ## Deploying to a Raspberry Pi
 
-1. **Get the code onto the Pi and install dependencies.** `better-sqlite3` is a native module —
-   run `npm install` *on the Pi itself* (ARM), not on your dev machine, so the binary matches.
+### Quick path: `deploy/setup.sh`
+
+Once the one-off manual steps below are done the first time, `deploy/setup.sh` handles
+everything else — pulling `main`, `npm install`, migrations, build, installing/refreshing the
+systemd unit, and restarting the service. It's also the update script: re-run it any time to
+deploy the latest `main`.
+
+1. **Get the code onto the Pi and create the run user** (native modules like `better-sqlite3`
+   need to be installed *on the Pi itself*, ARM, not on your dev machine — `setup.sh` does that
+   part for you):
    ```bash
    git clone <this repo> /opt/lhcc-volunteers
    cd /opt/lhcc-volunteers
+   sudo useradd -r -s /usr/sbin/nologin lhcc   # if it doesn't already exist
+   ```
+2. **Run the script once** — with no `apps/api/.env` yet, it creates one from `.env.example`
+   with a generated `BETTER_AUTH_SECRET` and stops so you can fill in the rest:
+   ```bash
+   ./deploy/setup.sh
+   ```
+3. **Configure environment.** Edit `apps/api/.env` — `BETTER_AUTH_URL` (your public HTTPS URL),
+   `TRUSTED_ORIGINS`, `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`, `GOOGLE_CLIENT_ID`/`SECRET` if
+   using Google sign-in, and (optionally) the `R2_*` backup variables — see "Backups" in the
+   manual path below.
+4. **Reverse proxy / HTTPS.** Google OAuth needs a stable public HTTPS callback URL
+   (`{BETTER_AUTH_URL}/api/auth/callback/google`). The app itself only serves plain HTTP — put a
+   reverse proxy in front. `deploy/setup-cloudflared.sh` automates a
+   [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+   for this if you don't want to open a port at home:
+   ```bash
+   ./deploy/setup-cloudflared.sh volunteers.yourdomain.org
+   ```
+   The first run needs a one-time interactive browser login to authorize the Pi against your
+   Cloudflare account (a link is printed to follow); the domain must already be on Cloudflare
+   DNS. Re-run it any time to change the hostname or port, or after a fresh clone. If you'd
+   rather run your own proxy, [Caddy](https://caddyserver.com/) is a good alternative for
+   automatic TLS.
+5. **Re-run the script to deploy:**
+   ```bash
+   ./deploy/setup.sh
+   ```
+   This installs/enables the systemd service and starts it; tail logs with
+   `sudo journalctl -u lhcc-volunteers -f`.
+
+### Manual path
+
+If you'd rather do it by hand, or want to understand what the scripts do:
+
+1. **Install dependencies and build** (on the Pi, ARM, so `better-sqlite3` compiles for the
+   right architecture):
+   ```bash
    npm install
    npm run build
    ```
-2. **Configure environment.** Copy `.env.example` to `/opt/lhcc-volunteers/.env` and fill it in —
+2. **Configure environment.** Copy `.env.example` to `apps/api/.env` and fill it in —
    `BETTER_AUTH_SECRET` (generate with `openssl rand -base64 32`), `BETTER_AUTH_URL` (your public
    HTTPS URL), `GOOGLE_CLIENT_ID`/`SECRET` if using Google sign-in.
 3. **Run migrations and seed the first admin:**
@@ -107,10 +153,7 @@ the email/password login form is available, which is enough to develop and test 
    npm run db:migrate -w apps/api
    npm run db:seed -w apps/api
    ```
-4. **Reverse proxy / HTTPS.** Google OAuth needs a stable public HTTPS callback URL
-   (`{BETTER_AUTH_URL}/api/auth/callback/google`). The app itself only serves plain HTTP — put a
-   reverse proxy in front (e.g. [Caddy](https://caddyserver.com/) for automatic TLS, or a
-   Cloudflare Tunnel if you don't want to open a port at home).
+4. **Reverse proxy / HTTPS** — see step 4 above.
 5. **Install the systemd service:**
    ```bash
    sudo useradd -r -s /usr/sbin/nologin lhcc   # if it doesn't already exist
@@ -143,12 +186,14 @@ the email/password login form is available, which is enough to develop and test 
 
 ```bash
 cd /opt/lhcc-volunteers
-git pull
-npm install
-npm run db:generate -w apps/api && npm run db:migrate -w apps/api   # only if the schema changed
-npm run build
-sudo systemctl restart lhcc-volunteers
+./deploy/setup.sh
 ```
+
+That's `git pull` + `npm install` + `db:migrate` + `npm run build` + reinstall the systemd unit
+if it changed + restart, all in one idempotent script — see `deploy/setup.sh`. It refuses to run
+if there are uncommitted local changes on the Pi. Note it only ever runs `db:migrate`, never
+`db:generate` — migrations are generated during development and committed to the repo, not
+generated against a live production database.
 
 ## Not yet implemented
 
