@@ -117,17 +117,21 @@ deploy the latest `main`.
    manual path below.
 4. **Reverse proxy / HTTPS.** Google OAuth needs a stable public HTTPS callback URL
    (`{BETTER_AUTH_URL}/api/auth/callback/google`). The app itself only serves plain HTTP — put a
-   reverse proxy in front. `deploy/setup-cloudflared.sh` automates a
+   reverse proxy in front. `deploy/setup-cloudflared.sh` installs `cloudflared` and connects
+   this machine to an existing
    [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
-   for this if you don't want to open a port at home:
-   ```bash
-   ./deploy/setup-cloudflared.sh volunteers.yourdomain.org
-   ```
-   The first run needs a one-time interactive browser login to authorize the Pi against your
-   Cloudflare account (a link is printed to follow); the domain must already be on Cloudflare
-   DNS. Re-run it any time to change the hostname or port, or after a fresh clone. If you'd
-   rather run your own proxy, [Caddy](https://caddyserver.com/) is a good alternative for
-   automatic TLS.
+   if you don't want to open a port at home:
+   1. In the Zero Trust dashboard, create the tunnel (**Networks → Tunnels**) and add its public
+      hostname route pointing at `http://localhost:3000` — the script doesn't create the tunnel
+      or configure routing, only connects to one that already exists.
+   2. Copy the tunnel token from the same page, then run:
+      ```bash
+      ./deploy/setup-cloudflared.sh <tunnel-token>
+      ```
+   Re-run it any time (e.g. after a fresh clone) — it just restarts the service if already
+   installed. To point this machine at a different tunnel, run
+   `sudo cloudflared service uninstall` first, then re-run with the new token. If you'd rather
+   run your own proxy, [Caddy](https://caddyserver.com/) is a good alternative for automatic TLS.
 5. **Re-run the script to deploy:**
    ```bash
    ./deploy/setup.sh
