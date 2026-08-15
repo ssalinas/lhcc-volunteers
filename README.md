@@ -106,16 +106,24 @@ deploy the latest `main`.
    cd /opt/lhcc-volunteers
    sudo useradd -r -s /usr/sbin/nologin lhcc   # if it doesn't already exist
    ```
-2. **Run the script once** — with no `apps/api/.env` yet, it creates one from `.env.example`
-   with a generated `BETTER_AUTH_SECRET` and stops so you can fill in the rest:
+2. **Install SQLite.** `deploy/setup-sqlite.sh` installs the `sqlite3` CLI (handy for
+   inspecting the database or restoring a backup by hand) and the build tools `npm install`
+   may need to compile `better-sqlite3` from source if no prebuilt binary matches this Pi's
+   architecture/Node version, and provisions the `data/` directory the systemd service writes
+   to:
+   ```bash
+   ./deploy/setup-sqlite.sh
+   ```
+3. **Run the deploy script once** — with no `apps/api/.env` yet, it creates one from
+   `.env.example` with a generated `BETTER_AUTH_SECRET` and stops so you can fill in the rest:
    ```bash
    ./deploy/setup.sh
    ```
-3. **Configure environment.** Edit `apps/api/.env` — `BETTER_AUTH_URL` (your public HTTPS URL),
+4. **Configure environment.** Edit `apps/api/.env` — `BETTER_AUTH_URL` (your public HTTPS URL),
    `TRUSTED_ORIGINS`, `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`, `GOOGLE_CLIENT_ID`/`SECRET` if
    using Google sign-in, and (optionally) the `R2_*` backup variables — see "Backups" in the
    manual path below.
-4. **Reverse proxy / HTTPS.** Google OAuth needs a stable public HTTPS callback URL
+5. **Reverse proxy / HTTPS.** Google OAuth needs a stable public HTTPS callback URL
    (`{BETTER_AUTH_URL}/api/auth/callback/google`). The app itself only serves plain HTTP — put a
    reverse proxy in front. `deploy/setup-cloudflared.sh` installs `cloudflared` and connects
    this machine to an existing
@@ -132,7 +140,7 @@ deploy the latest `main`.
    installed. To point this machine at a different tunnel, run
    `sudo cloudflared service uninstall` first, then re-run with the new token. If you'd rather
    run your own proxy, [Caddy](https://caddyserver.com/) is a good alternative for automatic TLS.
-5. **Re-run the script to deploy:**
+6. **Re-run the script to deploy:**
    ```bash
    ./deploy/setup.sh
    ```
