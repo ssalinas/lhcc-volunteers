@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  AutoScheduleRangeResult,
   AutoScheduleResult,
   AvailabilityEntry,
   AvailabilityStatus,
@@ -16,6 +17,7 @@ import type {
   OccurrenceDetail,
   OccurrenceSummary,
   RunBackupResult,
+  ScheduleNotificationResult,
   TeamMember,
   TeamSummaryEntry,
   TeamWithMemberCount,
@@ -316,6 +318,22 @@ export function useAutoSchedule() {
       qc.invalidateQueries({ queryKey: ['occurrences', 'detail', occurrenceId] });
       qc.invalidateQueries({ queryKey: ['occurrences'] });
     },
+  });
+}
+
+export function useAutoScheduleRange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ eventId, from, to }: { eventId: string; from: string; to: string }) =>
+      api.post<AutoScheduleRangeResult>(`/api/events/${eventId}/auto-schedule-range`, { from, to }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['occurrences'] }),
+  });
+}
+
+export function useSendScheduleNotifications() {
+  return useMutation({
+    mutationFn: (occurrenceIds: string[]) =>
+      api.post<ScheduleNotificationResult>('/api/schedule/notify', { occurrenceIds }),
   });
 }
 

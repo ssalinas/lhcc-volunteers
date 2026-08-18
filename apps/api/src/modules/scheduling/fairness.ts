@@ -1,4 +1,4 @@
-import { eq, inArray, and, ne } from 'drizzle-orm';
+import { eq, inArray, and, ne, lt } from 'drizzle-orm';
 import { subWeeks } from 'date-fns';
 import { db } from '../../db/client.js';
 import { assignments, volunteerRoles, eventOccurrences, teamMemberships, teams } from '../../db/schema/core.schema.js';
@@ -15,6 +15,7 @@ export interface FairnessCandidate {
   lastServedAt: Date | null;
   alreadyUsedInOccurrence: boolean;
   available: boolean;
+  recentlyServedSameEvent: boolean;
 }
 
 /** Deterministic tiebreak so equal-fairness candidates don't always sort the same way run after run. */
@@ -30,13 +31,15 @@ function stableTiebreakHash(occurrenceId: string, userId: string): number {
 /**
  * Ranks every active member of `teamId` as a candidate for a role on `occurrenceId`
  * (which starts at `occurrenceDate`), by fairness: fewer recent assignments and
- * longer-since-served come first. Used both by the manual "assign" picker and by
- * the auto-scheduler.
+ * longer-since-served come first, with a tiebreak against repeating whoever served on
+ * `eventId`'s immediately-preceding occurrence. Used both by the manual "assign" picker
+ * and by the auto-scheduler.
  */
 export async function getFairnessRankedCandidates(
   teamId: string,
   occurrenceId: string,
   occurrenceDate: Date,
+  eventId: string,
 ): Promise<FairnessCandidate[]> {
   const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
 
@@ -83,6 +86,23 @@ export async function getFairnessRankedCandidates(
     occurrenceAssignments.filter((a) => a.status !== 'declined').map((a) => a.userId),
   );
 
+  const previousOccurrence = await db.query.eventOccurrences.findFirst({
+    where: and(eq(eventOccurrences.eventId, eventId), lt(eventOccurrences.startAt, occurrenceDate)),
+    orderBy: (o, { desc }) => [desc(o.startAt)],
+  });
+
+  let recentlyServedIds = new Set<string>();
+  if (previousOccurrence) {
+    const previousAssignments = await db
+      .select({ userId: assignments.userId, status: assignments.status })
+      .from(assignments)
+      .innerJoin(volunteerRoles, eq(volunteerRoles.id, assignments.volunteerRoleId))
+      .where(eq(volunteerRoles.eventOccurrenceId, previousOccurrence.id));
+    recentlyServedIds = new Set(
+      previousAssignments.filter((a) => a.status !== 'declined').map((a) => a.userId),
+    );
+  }
+
   const dateOnly = toUtcDateOnly(occurrenceDate);
   const candidates: FairnessCandidate[] = await Promise.all(
     activeMembers.map(async (m) => ({
@@ -93,12 +113,16 @@ export async function getFairnessRankedCandidates(
       lastServedAt: lastServed.get(m.userId) ?? null,
       alreadyUsedInOccurrence: usedInOccurrence.has(m.userId),
       available: await isUserAvailableOn(m.userId, dateOnly),
+      recentlyServedSameEvent: recentlyServedIds.has(m.userId),
     })),
   );
 
   return candidates.sort((a, b) => {
     if (a.assignmentCountInWindow !== b.assignmentCountInWindow) {
       return a.assignmentCountInWindow - b.assignmentCountInWindow;
+    }
+    if (a.recentlyServedSameEvent !== b.recentlyServedSameEvent) {
+      return a.recentlyServedSameEvent ? 1 : -1;
     }
     const aTime = a.lastServedAt?.getTime() ?? -Infinity;
     const bTime = b.lastServedAt?.getTime() ?? -Infinity;
