@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { generateAllOccurrences } from './jobs/generateOccurrences.js';
 import { runDatabaseBackup } from './jobs/backupDb.js';
 import { ensureSystemTeams } from './jobs/ensureSystemTeams.js';
+import { runAvailabilityReminderCycle } from './jobs/sendAvailabilityReminders.js';
 
 async function main() {
   const app = await buildApp();
@@ -24,6 +25,14 @@ async function main() {
       await runDatabaseBackup(app.log);
     } catch (err) {
       app.log.error(err, 'Database backup failed');
+    }
+  });
+
+  cron.schedule('0 8 * * *', async () => {
+    try {
+      await runAvailabilityReminderCycle(app.log);
+    } catch (err) {
+      app.log.error(err, 'Availability reminder cycle failed');
     }
   });
 

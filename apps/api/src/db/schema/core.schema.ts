@@ -168,6 +168,33 @@ export const assignments = sqliteTable(
   ],
 );
 
+// ---------- Availability Reminders ----------
+
+export const availabilityReminderCycles = sqliteTable(
+  'availability_reminder_cycles',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    // "YYYY-MM" — the month this cycle kicked off in.
+    cycleMonth: text('cycle_month').notNull(),
+    remindersSent: integer('reminders_sent').notNull().default(0),
+    lastSentAt: integer('last_sent_at', { mode: 'timestamp' }),
+    // Set when a re-scan finds no more unset dates — cycle ended successfully.
+    resolvedAt: integer('resolved_at', { mode: 'timestamp' }),
+    // Set when remindersSent hits 4 and gaps still remain — cycle ended without resolving.
+    exhaustedAt: integer('exhausted_at', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    uniqueIndex('availability_reminder_cycles_user_month_idx').on(t.userId, t.cycleMonth),
+    index('availability_reminder_cycles_user_idx').on(t.userId),
+  ],
+);
+
 // ---------- Relations ----------
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -220,4 +247,8 @@ export const assignmentsRelations = relations(assignments, ({ one }) => ({
   }),
   user: one(user, { fields: [assignments.userId], references: [user.id] }),
   assignedBy: one(user, { fields: [assignments.assignedByUserId], references: [user.id] }),
+}));
+
+export const availabilityReminderCyclesRelations = relations(availabilityReminderCycles, ({ one }) => ({
+  user: one(user, { fields: [availabilityReminderCycles.userId], references: [user.id] }),
 }));

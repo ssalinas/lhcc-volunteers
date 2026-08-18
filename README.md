@@ -193,6 +193,20 @@ If you'd rather do it by hand, or want to understand what the scripts do:
       to the bucket and prunes it down to the last `R2_BACKUP_RETENTION_COUNT` (default 5).
 
    Leaving the R2 variables unset is fine — backups stay local-only, same as before.
+7. **Email reminders (optional).** A daily job sends a monthly availability-reminder cycle to
+   volunteers with upcoming unset dates (kickoff near the end of each month, up to 3 follow-ups
+   every 2 days, stopping early once resolved). It sends via Gmail/Google Workspace SMTP with an
+   app password — no separate email service needed.
+   1. On the Google account you want emails to come from: **Google Account → Security → 2-Step
+      Verification** (must be enabled first) **→ App passwords**. Create one for "Mail" and copy
+      the generated 16-character password.
+   2. Add to `.env`: `SMTP_USER` (that account's email address), `SMTP_APP_PASSWORD` (the app
+      password just generated). `SMTP_HOST`/`SMTP_PORT` default to Gmail's SMTP already;
+      `SMTP_FROM` is optional and defaults to `SMTP_USER`.
+   3. Restart the service.
+
+   Leaving the SMTP variables unset is fine — the reminder job silently no-ops, same as backups
+   without R2 configured.
 
 ### Updating a deployed instance
 
