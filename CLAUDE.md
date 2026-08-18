@@ -77,12 +77,27 @@ frontend hook together.
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
   SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the
   bucket to the last `R2_BACKUP_RETENTION_COUNT` when `R2_*` env vars are set — optional, no-ops
-  otherwise). All three run once on boot and then on a schedule via `node-cron`, wired in
-  `server.ts`. `runDatabaseBackup()` is also called directly (not through cron) by
-  `POST /api/admin/backups/run`, so admins can trigger an immediate backup from the Reports page.
+  otherwise), `sendAvailabilityReminders.ts` (daily; kicks off a monthly reminder cycle per user
+  with unset availability dates in the next 2 months, then follows up every 2 days up to 4 total
+  sends via `lib/mailer.ts`, tracked in `availability_reminder_cycles`). All are wired into
+  `server.ts` via `node-cron`; `generateOccurrences`/`ensureSystemTeams` also run once on boot,
+  while `sendAvailabilityReminders`/`backupDb` only run on their cron schedule.
+  `sendAvailabilityReminders` is state-driven off `availability_reminder_cycles` (not in-memory),
+  so a missed run or restart just resumes from what's stored. `runDatabaseBackup()` is also called
+  directly (not through cron) by `POST /api/admin/backups/run`, so admins can trigger an immediate
+  backup from the Reports page.
 - `modules/scheduling/fairness.ts` + `autoSchedule.ts` — the fairness ranking and greedy auto-fill
   algorithm; also reused by the manual "assign a volunteer" dropdown (`GET
   /api/occurrences/:id/eligible-candidates`) so manual picks are fairness-ordered too.
+  `modules/scheduling/availabilityGaps.ts` sits alongside them for the same reason (crosses
+  teams/occurrences/availability) — `getUnsetAvailabilityDates()` finds occurrences a user's teams
+  are involved in where they have **no** availability row at all, which is a different predicate
+  than `availability/service.ts`'s `isUserAvailableOn()` (that checks for an explicit `available`
+  row; an explicit `unavailable` row must NOT count as a gap needing a reminder).
+- `lib/mailer.ts` — outbound email via Gmail/Google Workspace SMTP (nodemailer + an app password),
+  same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
+  `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace
+  account instead of a new service.
 
 ### Data model
 
