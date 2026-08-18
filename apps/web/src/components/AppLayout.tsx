@@ -28,6 +28,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <>
               <span style={styles.navSep} />
               <NavItem to="/admin/events">Events</NavItem>
+              <NavItem to="/admin/schedule">Batch Schedule</NavItem>
               <NavItem to="/admin/teams">Manage Teams</NavItem>
               <NavItem to="/admin/users">Users</NavItem>
               <NavItem to="/admin/reports">Reports</NavItem>

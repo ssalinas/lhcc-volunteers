@@ -29,5 +29,6 @@ export const eligibleCandidateSchema = z.object({
   lastServedAt: z.string().datetime().nullable(),
   alreadyUsedInOccurrence: z.boolean(),
   available: z.boolean(),
+  recentlyServedSameEvent: z.boolean(),
 });
 export type EligibleCandidate = z.infer<typeof eligibleCandidateSchema>;
