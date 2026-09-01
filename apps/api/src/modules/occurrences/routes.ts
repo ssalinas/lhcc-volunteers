@@ -10,7 +10,7 @@ import { volunteerRoles } from '../../db/schema/core.schema.js';
 import { eq } from 'drizzle-orm';
 import { NotFoundError } from '../../lib/http-errors.js';
 
-function toAssignmentDto(a: {
+export function toAssignmentDto(a: {
   id: string;
   volunteerRoleId: string;
   userId: string;
@@ -127,7 +127,7 @@ export const occurrencesRoutes: FastifyPluginAsyncZod = async (app) => {
       const role = await db.query.volunteerRoles.findFirst({ where: eq(volunteerRoles.id, request.query.roleId) });
       if (!role || role.eventOccurrenceId !== request.params.id) throw new NotFoundError('Role not found');
       const occurrence = await occurrencesService.getOccurrence(request.params.id);
-      const candidates = await getFairnessRankedCandidates(role.teamId, occurrence.id, occurrence.startAt);
+      const candidates = await getFairnessRankedCandidates(role.teamId, occurrence.id, occurrence.startAt, occurrence.eventId);
       return candidates.map((c) => ({
         ...c,
         lastServedAt: c.lastServedAt ? c.lastServedAt.toISOString() : null,

@@ -168,6 +168,78 @@ export const assignments = sqliteTable(
   ],
 );
 
+// ---------- Availability Reminders ----------
+
+export const availabilityReminderCycles = sqliteTable(
+  'availability_reminder_cycles',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    // "YYYY-MM" — the month this cycle kicked off in.
+    cycleMonth: text('cycle_month').notNull(),
+    remindersSent: integer('reminders_sent').notNull().default(0),
+    lastSentAt: integer('last_sent_at', { mode: 'timestamp' }),
+    // Set when a re-scan finds no more unset dates — cycle ended successfully.
+    resolvedAt: integer('resolved_at', { mode: 'timestamp' }),
+    // Set when remindersSent hits 4 and gaps still remain — cycle ended without resolving.
+    exhaustedAt: integer('exhausted_at', { mode: 'timestamp' }),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    uniqueIndex('availability_reminder_cycles_user_month_idx').on(t.userId, t.cycleMonth),
+    index('availability_reminder_cycles_user_idx').on(t.userId),
+  ],
+);
+
+// ---------- Schedule Notifications ----------
+
+export const scheduleNotificationBatches = sqliteTable('schedule_notification_batches', {
+  id: text('id').primaryKey(),
+  sentByUserId: text('sent_by_user_id')
+    .notNull()
+    .references(() => user.id),
+  recipientCount: integer('recipient_count').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const scheduleNotificationBatchOccurrences = sqliteTable(
+  'schedule_notification_batch_occurrences',
+  {
+    id: text('id').primaryKey(),
+    batchId: text('batch_id')
+      .notNull()
+      .references(() => scheduleNotificationBatches.id, { onDelete: 'cascade' }),
+    eventOccurrenceId: text('event_occurrence_id')
+      .notNull()
+      .references(() => eventOccurrences.id, { onDelete: 'cascade' }),
+  },
+  (t) => [uniqueIndex('sched_notif_batch_occ_idx').on(t.batchId, t.eventOccurrenceId)],
+);
+
+export const scheduleNotificationRecipients = sqliteTable(
+  'schedule_notification_recipients',
+  {
+    id: text('id').primaryKey(),
+    batchId: text('batch_id')
+      .notNull()
+      .references(() => scheduleNotificationBatches.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(), // snapshot at send time
+    sentAt: integer('sent_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [uniqueIndex('sched_notif_recipients_batch_user_idx').on(t.batchId, t.userId)],
+);
+
 // ---------- Relations ----------
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -220,4 +292,35 @@ export const assignmentsRelations = relations(assignments, ({ one }) => ({
   }),
   user: one(user, { fields: [assignments.userId], references: [user.id] }),
   assignedBy: one(user, { fields: [assignments.assignedByUserId], references: [user.id] }),
+}));
+
+export const availabilityReminderCyclesRelations = relations(availabilityReminderCycles, ({ one }) => ({
+  user: one(user, { fields: [availabilityReminderCycles.userId], references: [user.id] }),
+}));
+
+export const scheduleNotificationBatchesRelations = relations(scheduleNotificationBatches, ({ many }) => ({
+  occurrences: many(scheduleNotificationBatchOccurrences),
+  recipients: many(scheduleNotificationRecipients),
+}));
+
+export const scheduleNotificationBatchOccurrencesRelations = relations(
+  scheduleNotificationBatchOccurrences,
+  ({ one }) => ({
+    batch: one(scheduleNotificationBatches, {
+      fields: [scheduleNotificationBatchOccurrences.batchId],
+      references: [scheduleNotificationBatches.id],
+    }),
+    occurrence: one(eventOccurrences, {
+      fields: [scheduleNotificationBatchOccurrences.eventOccurrenceId],
+      references: [eventOccurrences.id],
+    }),
+  }),
+);
+
+export const scheduleNotificationRecipientsRelations = relations(scheduleNotificationRecipients, ({ one }) => ({
+  batch: one(scheduleNotificationBatches, {
+    fields: [scheduleNotificationRecipients.batchId],
+    references: [scheduleNotificationBatches.id],
+  }),
+  user: one(user, { fields: [scheduleNotificationRecipients.userId], references: [user.id] }),
 }));

@@ -26,6 +26,15 @@ const envSchema = z.object({
   R2_BUCKET_NAME: z.string().optional(),
   R2_BACKUP_RETENTION_COUNT: z.coerce.number().int().positive().default(5),
 
+  // Outbound email (availability reminders, batch schedule notifications) via Gmail/Google
+  // Workspace SMTP with an app password — optional. When unset, both features silently no-op.
+  // See README for how to generate an app password.
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.string().email().optional(),
+  SMTP_APP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
   SEED_ADMIN_NAME: z.string().optional(),

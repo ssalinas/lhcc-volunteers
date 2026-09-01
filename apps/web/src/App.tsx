@@ -8,6 +8,7 @@ import Teams from './routes/Teams.js';
 import OccurrenceView from './routes/OccurrenceView.js';
 import AdminEvents from './routes/admin/Events.js';
 import AdminEventEditor from './routes/admin/EventEditor.js';
+import AdminBatchSchedule from './routes/admin/BatchSchedule.js';
 import AdminOccurrenceDetail from './routes/admin/OccurrenceDetail.js';
 import AdminTeams from './routes/admin/Teams.js';
 import AdminUsers from './routes/admin/Users.js';
@@ -85,6 +86,16 @@ export default function App() {
           <RequireAdmin>
             <AppLayout>
               <AdminEventEditor />
+            </AppLayout>
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/schedule"
+        element={
+          <RequireAdmin>
+            <AppLayout>
+              <AdminBatchSchedule />
             </AppLayout>
           </RequireAdmin>
         }

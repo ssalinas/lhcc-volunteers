@@ -44,6 +44,19 @@ export async function listOccurrences(from: Date, to: Date, currentUserId?: stri
   });
 }
 
+/** Ids of scheduled (non-canceled) occurrences of one event within [from, to), date ascending. */
+export async function listOccurrenceIdsForEvent(eventId: string, from: Date, to: Date): Promise<string[]> {
+  const rows = await db.query.eventOccurrences.findMany({
+    where: and(
+      eq(eventOccurrences.eventId, eventId),
+      gte(eventOccurrences.startAt, from),
+      lte(eventOccurrences.startAt, to),
+    ),
+    orderBy: (o, { asc }) => [asc(o.startAt)],
+  });
+  return rows.filter((o) => o.status !== 'canceled').map((o) => o.id);
+}
+
 export async function getOccurrence(id: string) {
   const occurrence = await db.query.eventOccurrences.findFirst({
     where: eq(eventOccurrences.id, id),

@@ -59,11 +59,20 @@ frontend hook together.
 ### API structure (`apps/api/src`)
 
 - `modules/<domain>/{routes.ts,service.ts}` — one pair per domain (assignments, availability,
-  backups, events, occurrences, reports, scheduling, teams, users). `routes.ts` handles
-  auth/validation and DTO shaping; `service.ts` holds the Drizzle queries (or, for `backups`, calls
-  into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB table backing it). Admin-only
-  routes call `requireAdmin(request)` from `auth/plugin.ts`; anyone-authenticated routes call
-  `requireAuth(request)`.
+  backups, events, occurrences, reports, scheduleNotifications, scheduling, teams, users).
+  `routes.ts` handles auth/validation and DTO shaping; `service.ts` holds the Drizzle queries (or,
+  for `backups`, calls into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB table backing
+  it). Admin-only routes call `requireAdmin(request)` from `auth/plugin.ts`; anyone-authenticated
+  routes call `requireAuth(request)`. `modules/scheduleNotifications` is the one exception to "one
+  route file per domain, one concern" — `POST /api/schedule/notify` emails every active member of
+  every team involved in a batch of occurrences (not just who's assigned) the full named roster,
+  via `lib/mailer.ts`, and logs the send in `schedule_notification_batches` +
+  `..._batch_occurrences` + `..._recipients` for audit/dedup purposes. Its sibling batch-scheduling
+  endpoint, `POST /api/events/:id/auto-schedule-range`, lives in `modules/events/routes.ts` instead
+  (next to the existing `regenerate-occurrences` sub-action) since it's scoped to one event — it
+  loops `autoScheduleOccurrence` sequentially over every occurrence in a date range, which works
+  unmodified because fairness ranking re-queries the DB each call and so already sees assignments
+  made earlier in the same run.
 - `db/schema/auth.schema.ts` — hand-written to match what `@better-auth/cli generate` would produce
   (user/session/account/verification), extended with better-auth's `additionalFields` (`role`,
   `phone`, `active` on `user`). These additionalFields **are** returned directly on
@@ -77,12 +86,32 @@ frontend hook together.
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
   SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the
   bucket to the last `R2_BACKUP_RETENTION_COUNT` when `R2_*` env vars are set — optional, no-ops
-  otherwise). All three run once on boot and then on a schedule via `node-cron`, wired in
-  `server.ts`. `runDatabaseBackup()` is also called directly (not through cron) by
-  `POST /api/admin/backups/run`, so admins can trigger an immediate backup from the Reports page.
+  otherwise), `sendAvailabilityReminders.ts` (daily; kicks off a monthly reminder cycle per user
+  with unset availability dates in the next 2 months, then follows up every 2 days up to 4 total
+  sends via `lib/mailer.ts`, tracked in `availability_reminder_cycles`). All are wired into
+  `server.ts` via `node-cron`; `generateOccurrences`/`ensureSystemTeams` also run once on boot,
+  while `sendAvailabilityReminders`/`backupDb` only run on their cron schedule.
+  `sendAvailabilityReminders` is state-driven off `availability_reminder_cycles` (not in-memory),
+  so a missed run or restart just resumes from what's stored. `runDatabaseBackup()` is also called
+  directly (not through cron) by `POST /api/admin/backups/run`, so admins can trigger an immediate
+  backup from the Reports page.
 - `modules/scheduling/fairness.ts` + `autoSchedule.ts` — the fairness ranking and greedy auto-fill
   algorithm; also reused by the manual "assign a volunteer" dropdown (`GET
   /api/occurrences/:id/eligible-candidates`) so manual picks are fairness-ordered too.
+  `getFairnessRankedCandidates` takes an `eventId` param and ranks whoever served on that event's
+  immediately-previous occurrence behind everyone else as a tiebreak (`recentlyServedSameEvent`) —
+  a soft "don't repeat consecutive weeks" preference, inserted before the `lastServedAt` tiebreak
+  since it's deliberately targeted at this one event rather than global history. It never excludes
+  a candidate, so a small volunteer pool can still repeat when nobody else is available.
+  `modules/scheduling/availabilityGaps.ts` sits alongside them for the same reason (crosses
+  teams/occurrences/availability) — `getUnsetAvailabilityDates()` finds occurrences a user's teams
+  are involved in where they have **no** availability row at all, which is a different predicate
+  than `availability/service.ts`'s `isUserAvailableOn()` (that checks for an explicit `available`
+  row; an explicit `unavailable` row must NOT count as a gap needing a reminder).
+- `lib/mailer.ts` — outbound email via Gmail/Google Workspace SMTP (nodemailer + an app password),
+  same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
+  `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace
+  account instead of a new service.
 
 ### Data model
 
@@ -110,7 +139,10 @@ from an explicit `status: 'unavailable'`.
 - `routes/` — volunteer-facing pages; `routes/admin/` — admin-only pages, gated by `RequireAdmin` in
   `App.tsx` (`RequireAuth` for anyone-signed-in routes). Occurrences have two views over the same
   data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers who
-  click through from the Calendar).
+  click through from the Calendar). `/admin/schedule` (`BatchSchedule.tsx`) groups occurrences
+  across every event in an admin-chosen date range, letting an admin auto-schedule a whole event's
+  range in one action and select occurrences (across different events) to notify all their teams'
+  members about at once — reuses the existing `useOccurrences` feed rather than a dedicated one.
 - `index.css` — design tokens (CSS custom properties for the church's brand colors/fonts) plus
   utility classes (`.btn`/`.btn-primary`/`.btn-secondary`/`.btn-ghost`/`.btn-danger`, `.card`,
   `.badge`/`.badge-success`/`.badge-warning`/`.badge-danger`). Use these instead of ad hoc inline
