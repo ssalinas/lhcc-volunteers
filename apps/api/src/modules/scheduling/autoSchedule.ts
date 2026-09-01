@@ -28,7 +28,10 @@ export async function autoScheduleOccurrence(occurrenceId: string, adminUserId: 
     occurrence.roles.map(async (role) => {
       const filled = role.assignments.filter((a) => a.status !== 'declined').length;
       const remaining = role.slotsCount - filled;
-      const candidates = remaining > 0 ? await getFairnessRankedCandidates(role.teamId, occurrenceId, occurrence.startAt) : [];
+      const candidates =
+        remaining > 0
+          ? await getFairnessRankedCandidates(role.teamId, occurrenceId, occurrence.startAt, occurrence.eventId)
+          : [];
       const availableFreshCount = candidates.filter((c) => c.available && !c.alreadyUsedInOccurrence).length;
       return { role, remaining, availableFreshCount };
     }),
@@ -46,7 +49,7 @@ export async function autoScheduleOccurrence(occurrenceId: string, adminUserId: 
   for (const { role, remaining } of orderedRoles) {
     // Re-fetch fresh each iteration: earlier roles in this same run may have just
     // used someone, which must be reflected in "alreadyUsedInOccurrence" now.
-    const candidates = await getFairnessRankedCandidates(role.teamId, occurrenceId, occurrence.startAt);
+    const candidates = await getFairnessRankedCandidates(role.teamId, occurrenceId, occurrence.startAt, occurrence.eventId);
     const fresh = candidates.filter((c) => c.available && !c.alreadyUsedInOccurrence);
     const stacked = role.stackable ? candidates.filter((c) => c.available && c.alreadyUsedInOccurrence) : [];
     const pool = [...fresh, ...stacked];

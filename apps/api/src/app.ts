@@ -18,6 +18,7 @@ import { occurrencesRoutes } from './modules/occurrences/routes.js';
 import { assignmentsRoutes } from './modules/assignments/routes.js';
 import { reportsRoutes } from './modules/reports/routes.js';
 import { backupsRoutes } from './modules/backups/routes.js';
+import { scheduleNotificationsRoutes } from './modules/scheduleNotifications/routes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const webDistPath = join(__dirname, '../../web/dist');
@@ -63,6 +64,7 @@ export async function buildApp() {
   await app.register(assignmentsRoutes);
   await app.register(reportsRoutes);
   await app.register(backupsRoutes);
+  await app.register(scheduleNotificationsRoutes);
 
   if (isProduction) {
     await app.register(fastifyStatic, {
