@@ -38,6 +38,8 @@ export default function AdminUsers() {
       <p>
         Create an account here to invite someone. If you set a temporary password they can sign in with it directly;
         otherwise they can sign in with Google using this exact email address once we have Google sign-in configured.
+        Anyone who signs in with Google without an existing invite gets a brand-new account that starts out
+        inactive — they can't use the app until you check "Active" for them below.
       </p>
 
       <form
@@ -94,11 +96,14 @@ export default function AdminUsers() {
                   </select>
                 </td>
                 <td style={{ padding: '0.6rem 0.9rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={u.active}
-                    onChange={(e) => updateUser.mutate({ id: u.id, input: { active: e.target.checked } })}
-                  />
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={u.active}
+                      onChange={(e) => updateUser.mutate({ id: u.id, input: { active: e.target.checked } })}
+                    />
+                    {!u.active && <span className="badge badge-warning">Pending approval</span>}
+                  </label>
                 </td>
                 <td style={{ padding: '0.6rem 0.9rem' }}>
                   <button

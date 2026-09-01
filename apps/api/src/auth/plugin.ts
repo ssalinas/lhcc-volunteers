@@ -64,6 +64,12 @@ export async function requireAuth(request: FastifyRequest) {
     (err as Error & { statusCode: number }).statusCode = 401;
     throw err;
   }
+  const active = (request.session.user as { active?: boolean }).active;
+  if (active === false) {
+    const err = new Error('Your account is pending admin approval.');
+    (err as Error & { statusCode: number }).statusCode = 403;
+    throw err;
+  }
   return request.session;
 }
 
