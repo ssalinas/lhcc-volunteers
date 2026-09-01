@@ -81,7 +81,18 @@ frontend hook together.
   relational queries (`db.query.X.findMany({ with: {...} })`) throughout the service layer.
 - `auth/plugin.ts` — better-auth speaks the Fetch API (`Request`/`Response`); Fastify doesn't, so
   this hand-adapts Fastify's request/reply to/from a `Request`/`Response` and mounts it at
-  `/api/auth/*`. It also decorates every request with `request.session` up front.
+  `/api/auth/*`. It also decorates every request with `request.session` up front. `requireAuth`
+  rejects (403) any session where `user.active === false` — this is the actual enforcement point
+  for the Google sign-in approval gate described next; the frontend (`RequireAuth.tsx`) mirrors
+  the same check to show a "pending approval" screen instead of a confusing error.
+- `auth/auth.ts` — `active` defaults to `true` (email/password accounts only ever get created by
+  an admin via `modules/users/routes.ts`, so that path is inherently pre-approved), **except**
+  a `databaseHooks.user.create.before` hook forces it to `false` when `context.path` starts with
+  `/callback/` — that's the endpoint template every OAuth provider callback matches (not the
+  resolved URL), so it only fires when Google sign-in auto-creates a brand-new account, not for
+  email/password sign-up/sign-in. This is what stops "sign in with Google" from handing out real
+  access to anyone with a Google account — new Google sign-ins land inactive until an admin checks
+  "Active" for them on the Users page.
 - `jobs/` — `generateOccurrences.ts` (materializes recurring events into dated `event_occurrences`,
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
   SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the

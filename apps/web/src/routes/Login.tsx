@@ -46,6 +46,7 @@ export default function Login() {
         <button type="button" onClick={handleGoogle} className="btn btn-secondary" style={{ width: '100%' }}>
           Sign in with Google
         </button>
+        <p style={styles.approvalNote}>First-time Google sign-ins need admin approval before you can use the app.</p>
 
         <div style={styles.divider}>or</div>
 
@@ -100,6 +101,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-text-faint)',
     margin: '1.1rem 0',
     fontSize: '0.8rem',
+  },
+  approvalNote: {
+    textAlign: 'center',
+    color: 'var(--color-text-faint)',
+    fontSize: '0.78rem',
+    margin: '0.6rem 0 0',
   },
   label: {
     display: 'flex',

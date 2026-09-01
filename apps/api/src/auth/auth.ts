@@ -43,10 +43,33 @@ export const auth = betterAuth({
         type: 'string',
         required: false,
       },
+      // Active by default — email/password accounts only ever get created by an admin
+      // (via modules/users/service.ts; there's no public sign-up form), so that path is
+      // inherently already "approved". The one truly open door is Google sign-in, which
+      // auto-creates a new account for any Google user on first login — that's gated to
+      // inactive below, via the create.before hook, so a random Google sign-in can't get
+      // real access without an admin flipping them active on the Users page.
       active: {
         type: 'boolean',
         defaultValue: true,
         input: false,
+      },
+    },
+  },
+  // Requires an admin to approve any brand-new account created via Google sign-in
+  // before it can do anything (see auth/plugin.ts's requireAuth, which rejects
+  // active: false). `context.path` here is the *endpoint template* better-auth matched
+  // ("/callback/:id" for every OAuth provider callback, vs. e.g. "/sign-up/email"), not
+  // the resolved request URL — this only fires for account creation via OAuth.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (newUser, context) => {
+          if (context?.path?.startsWith('/callback/')) {
+            return { data: { ...newUser, active: false } };
+          }
+          return { data: newUser };
+        },
       },
     },
   },
