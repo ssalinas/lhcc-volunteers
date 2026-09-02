@@ -59,4 +59,14 @@ export const usersRoutes: FastifyPluginAsyncZod = async (app) => {
       return toSummary(updated);
     },
   );
+
+  app.delete(
+    '/api/admin/users/:id',
+    { schema: { params: z.object({ id: idSchema }) } },
+    async (request, reply) => {
+      const session = await requireAdmin(request);
+      await usersService.deleteUser(request.params.id, session.user.id);
+      reply.status(204);
+    },
+  );
 };

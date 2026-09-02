@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import type { UserRole } from '@lhcc/shared';
 import { AvailabilityDateList } from '../../components/AvailabilityDateList.js';
-import { useAdminUsers, useCreateUser, useUpdateUser } from '../../api/hooks.js';
+import { useAdminUsers, useCreateUser, useDeleteUser, useUpdateUser } from '../../api/hooks.js';
 
 export default function AdminUsers() {
   const { data: users, isLoading } = useAdminUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
   const [availabilityUserId, setAvailabilityUserId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -30,6 +32,20 @@ export default function AdminUsers() {
         onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create user'),
       },
     );
+  }
+
+  function handleDelete(id: string, name: string) {
+    if (
+      !confirm(
+        `Delete ${name}? This permanently removes their account and all their assignment/availability history. This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeleteError(null);
+    deleteUser.mutate(id, {
+      onError: (err) => setDeleteError(err instanceof Error ? err.message : 'Failed to delete user'),
+    });
   }
 
   return (
@@ -67,6 +83,7 @@ export default function AdminUsers() {
         </button>
       </form>
       {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      {deleteError && <p style={{ color: 'var(--color-danger)' }}>{deleteError}</p>}
 
       {isLoading ? (
         <p>Loading…</p>
@@ -106,14 +123,24 @@ export default function AdminUsers() {
                   </label>
                 </td>
                 <td style={{ padding: '0.6rem 0.9rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setAvailabilityUserId(availabilityUserId === u.id ? null : u.id)}
-                    className="btn btn-secondary btn-sm"
-                    style={availabilityUserId === u.id ? { background: 'var(--color-primary-light)', color: 'var(--color-primary)', borderColor: 'var(--color-primary)' } : undefined}
-                  >
-                    {availabilityUserId === u.id ? 'Hide availability' : 'Edit availability'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAvailabilityUserId(availabilityUserId === u.id ? null : u.id)}
+                      className="btn btn-secondary btn-sm"
+                      style={availabilityUserId === u.id ? { background: 'var(--color-primary-light)', color: 'var(--color-primary)', borderColor: 'var(--color-primary)' } : undefined}
+                    >
+                      {availabilityUserId === u.id ? 'Hide availability' : 'Edit availability'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(u.id, u.name)}
+                      disabled={deleteUser.isPending}
+                      className="btn btn-danger btn-sm"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
