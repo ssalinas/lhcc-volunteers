@@ -208,3 +208,10 @@ from an explicit `status: 'unavailable'`.
   link to it. Leaving `emailVerified: false` on an admin-created row permanently deadlocks that
   volunteer's first Google sign-in: the row can only become verified *by* linking, which is
   blocked *because* it isn't verified yet.
+- `DELETE /api/admin/users/:id` (`modules/users/service.ts::deleteUser`) is a hard delete, not a
+  soft-disable (that's what the existing `active` toggle is for). Most FKs to `user.id` cascade
+  (assignments, availability, team_memberships, sessions), but a few "who did this" audit columns
+  deliberately don't (`events.createdBy`, `assignments.assignedByUserId`,
+  `schedule_notification_batches.sentByUserId`) — deleting a user with any of that history throws
+  a SQLite foreign key error, which `deleteUser` catches and turns into a 409 pointing the admin at
+  `active: false` instead. Also blocks deleting your own account (400).

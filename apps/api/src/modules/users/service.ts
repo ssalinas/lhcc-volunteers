@@ -4,7 +4,7 @@ import { db } from '../../db/client.js';
 import { user } from '../../db/schema/auth.schema.js';
 import { auth } from '../../auth/auth.js';
 import { newId } from '../../lib/ids.js';
-import { ConflictError, NotFoundError } from '../../lib/http-errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../../lib/http-errors.js';
 
 export async function listUsers() {
   return db.query.user.findMany({ orderBy: (u, { asc }) => [asc(u.name)] });
@@ -68,4 +68,28 @@ export async function updateUser(id: string, input: UpdateUserInput) {
     .where(eq(user.id, id))
     .returning();
   return updated;
+}
+
+export async function deleteUser(id: string, requestingUserId: string) {
+  if (id === requestingUserId) {
+    throw new BadRequestError("You can't delete your own account.");
+  }
+  await getUser(id);
+
+  try {
+    await db.delete(user).where(eq(user.id, id));
+  } catch (err) {
+    // Most FKs to user.id cascade (assignments, availability, team_memberships, sessions), but
+    // a few "who did this" audit columns deliberately don't (events.createdBy,
+    // assignments.assignedByUserId, schedule_notification_batches.sentByUserId) — SQLite raises
+    // a foreign key constraint error rather than silently orphaning that history.
+    if (err instanceof Error && 'code' in err && err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      throw new ConflictError(
+        "Can't delete this user — they have history elsewhere in the app (created an event, " +
+          'assigned a volunteer, or sent a notification). Set them to inactive instead to remove ' +
+          "their access without losing that history.",
+      );
+    }
+    throw err;
+  }
 }
