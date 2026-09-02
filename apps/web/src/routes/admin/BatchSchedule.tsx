@@ -2,15 +2,13 @@ import { useMemo, useState } from 'react';
 import { addWeeks, endOfDay, format, startOfDay } from 'date-fns';
 import type { OccurrenceSummary } from '@lhcc/shared';
 import { Modal } from '../../components/Modal.js';
-import { useAutoScheduleRange, useOccurrences, useSendScheduleNotifications } from '../../api/hooks.js';
+import { useAutoScheduleSelected, useOccurrences, useSendScheduleNotifications } from '../../api/hooks.js';
 
 export default function AdminBatchSchedule() {
   const [fromDate, setFromDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(() => format(addWeeks(new Date(), 4), 'yyyy-MM-dd'));
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmingEvent, setConfirmingEvent] = useState<{ eventId: string; eventName: string; roleNames: string[] } | null>(
-    null,
-  );
+  const [showAutoScheduleConfirm, setShowAutoScheduleConfirm] = useState(false);
   const [selectedRoleNames, setSelectedRoleNames] = useState<Set<string>>(new Set());
   const [autoScheduleMessage, setAutoScheduleMessage] = useState<string | null>(null);
   const [showNotifyConfirm, setShowNotifyConfirm] = useState(false);
@@ -20,7 +18,7 @@ export default function AdminBatchSchedule() {
   const toISO = useMemo(() => endOfDay(new Date(toDate)).toISOString(), [toDate]);
 
   const { data: occurrences, isLoading } = useOccurrences(fromISO, toISO);
-  const autoScheduleRange = useAutoScheduleRange();
+  const autoScheduleSelected = useAutoScheduleSelected();
   const sendNotifications = useSendScheduleNotifications();
 
   const groups = useMemo(() => {
@@ -31,17 +29,23 @@ export default function AdminBatchSchedule() {
       group.occurrences.push(o);
       byEvent.set(o.eventId, group);
     }
-    return [...byEvent.values()]
-      .map((group) => ({
-        ...group,
-        roleNames: [...new Set(group.occurrences.flatMap((o) => o.roleNames))].sort(),
-      }))
-      .sort((a, b) => a.eventName.localeCompare(b.eventName));
+    return [...byEvent.values()].sort((a, b) => a.eventName.localeCompare(b.eventName));
   }, [occurrences]);
 
   const selectedEventCount = new Set(
     [...selected].map((id) => (occurrences ?? []).find((o) => o.id === id)?.eventId).filter(Boolean),
   ).size;
+
+  // Union of role names across every currently-selected occurrence (can span multiple events) —
+  // drives the role checklist in the auto-schedule confirm modal.
+  const selectedRoleNamesAvailable = useMemo(() => {
+    const names = new Set<string>();
+    for (const o of occurrences ?? []) {
+      if (!selected.has(o.id)) continue;
+      for (const name of o.roleNames) names.add(name);
+    }
+    return [...names].sort();
+  }, [occurrences, selected]);
 
   function toggleOccurrence(id: string) {
     setSelected((prev) => {
@@ -52,24 +56,17 @@ export default function AdminBatchSchedule() {
     });
   }
 
-  function handleAutoScheduleConfirm() {
-    if (!confirmingEvent) return;
-    setAutoScheduleMessage(null);
-    const roleNames = selectedRoleNames.size < confirmingEvent.roleNames.length ? [...selectedRoleNames] : undefined;
-    autoScheduleRange.mutate(
-      { eventId: confirmingEvent.eventId, from: fromISO, to: toISO, roleNames },
-      {
-        onSuccess: (result) => {
-          const filled = result.results.reduce((sum, r) => sum + r.createdAssignments.length, 0);
-          const gaps = result.results.reduce((sum, r) => sum + r.gaps.length, 0);
-          setAutoScheduleMessage(
-            `${confirmingEvent.eventName}: filled ${filled} slot(s) across ${result.results.length} occurrence(s).` +
-              (gaps > 0 ? ` ${gaps} slot(s) still need attention.` : ' Everything is staffed.'),
-          );
-          setConfirmingEvent(null);
-        },
-      },
-    );
+  function toggleGroupSelection(group: { occurrences: OccurrenceSummary[] }) {
+    const groupIds = group.occurrences.map((o) => o.id);
+    const allSelected = groupIds.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of groupIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
   }
 
   function toggleRoleName(roleName: string) {
@@ -79,6 +76,31 @@ export default function AdminBatchSchedule() {
       else next.add(roleName);
       return next;
     });
+  }
+
+  function openAutoScheduleConfirm() {
+    setSelectedRoleNames(new Set(selectedRoleNamesAvailable));
+    setShowAutoScheduleConfirm(true);
+  }
+
+  function handleAutoScheduleConfirm() {
+    setAutoScheduleMessage(null);
+    const roleNames =
+      selectedRoleNames.size < selectedRoleNamesAvailable.length ? [...selectedRoleNames] : undefined;
+    autoScheduleSelected.mutate(
+      { occurrenceIds: [...selected], roleNames },
+      {
+        onSuccess: (results) => {
+          const filled = results.reduce((sum, r) => sum + r.createdAssignments.length, 0);
+          const gaps = results.reduce((sum, r) => sum + r.gaps.length, 0);
+          setAutoScheduleMessage(
+            `Filled ${filled} slot(s) across ${results.length} occurrence(s).` +
+              (gaps > 0 ? ` ${gaps} slot(s) still need attention.` : ' Everything is staffed.'),
+          );
+          setShowAutoScheduleConfirm(false);
+        },
+      },
+    );
   }
 
   function handleSendNotifications() {
@@ -98,8 +120,8 @@ export default function AdminBatchSchedule() {
     <div>
       <h1 style={{ marginBottom: '0.25rem' }}>Batch Scheduling</h1>
       <p style={{ marginTop: 0, color: 'var(--color-text-muted)' }}>
-        Auto-schedule a recurring event across a date range at once, then notify everyone on the teams
-        involved about the result.
+        Select occurrences below — use "Select all" to grab a whole event's range at once — then
+        auto-schedule and/or notify the teams involved about exactly what's selected.
       </p>
 
       <div className="card" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
@@ -134,16 +156,14 @@ export default function AdminBatchSchedule() {
             <div key={group.eventId} className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                 <strong>{group.eventName}</strong>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmingEvent({ eventId: group.eventId, eventName: group.eventName, roleNames: group.roleNames });
-                    setSelectedRoleNames(new Set(group.roleNames));
-                  }}
-                  className="btn btn-secondary btn-sm"
-                >
-                  Auto-schedule this range
-                </button>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={group.occurrences.every((o) => selected.has(o.id))}
+                    onChange={() => toggleGroupSelection(group)}
+                  />
+                  Select all
+                </label>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {group.occurrences.map((o) => {
@@ -180,31 +200,37 @@ export default function AdminBatchSchedule() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
             boxShadow: '0 -1px 6px rgba(16,24,40,0.08)',
           }}
         >
           <span>
             {selected.size} occurrence(s) selected across {selectedEventCount} event(s)
           </span>
-          <button type="button" onClick={() => setShowNotifyConfirm(true)} className="btn btn-primary">
-            Send schedule notification
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" onClick={openAutoScheduleConfirm} className="btn btn-secondary">
+              Auto-schedule selected
+            </button>
+            <button type="button" onClick={() => setShowNotifyConfirm(true)} className="btn btn-primary">
+              Send schedule notification
+            </button>
+          </div>
         </div>
       )}
 
-      {confirmingEvent && (
-        <Modal title="Auto-schedule this range?" onClose={() => setConfirmingEvent(null)}>
+      {showAutoScheduleConfirm && (
+        <Modal title="Auto-schedule selected occurrences?" onClose={() => setShowAutoScheduleConfirm(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <p style={{ margin: 0 }}>
-              Fill unfilled slots for <strong>{confirmingEvent.eventName}</strong> across every occurrence between{' '}
-              <strong>{fromDate}</strong> and <strong>{toDate}</strong>? This only adds to unfilled slots — it won't
-              change existing assignments.
+              Fill unfilled slots across the <strong>{selected.size}</strong> selected occurrence(s)? This only
+              adds to unfilled slots — it won't change existing assignments.
             </p>
-            {confirmingEvent.roleNames.length > 1 && (
+            {selectedRoleNamesAvailable.length > 1 && (
               <div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>Roles to schedule</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                  {confirmingEvent.roleNames.map((roleName) => (
+                  {selectedRoleNamesAvailable.map((roleName) => (
                     <label key={roleName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
                       <input
                         type="checkbox"
@@ -218,16 +244,16 @@ export default function AdminBatchSchedule() {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button type="button" onClick={() => setConfirmingEvent(null)} className="btn btn-secondary">
+              <button type="button" onClick={() => setShowAutoScheduleConfirm(false)} className="btn btn-secondary">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAutoScheduleConfirm}
-                disabled={autoScheduleRange.isPending || selectedRoleNames.size === 0}
+                disabled={autoScheduleSelected.isPending || selectedRoleNames.size === 0}
                 className="btn btn-primary"
               >
-                {autoScheduleRange.isPending ? 'Scheduling…' : 'Auto-schedule'}
+                {autoScheduleSelected.isPending ? 'Scheduling…' : 'Auto-schedule'}
               </button>
             </div>
           </div>

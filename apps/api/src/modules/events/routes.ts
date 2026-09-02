@@ -1,17 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import {
-  createEventSchema,
-  createEventRoleTemplateSchema,
-  updateEventSchema,
-  autoScheduleRangeSchema,
-  idSchema,
-} from '@lhcc/shared';
+import { createEventSchema, createEventRoleTemplateSchema, updateEventSchema, idSchema } from '@lhcc/shared';
 import { requireAdmin } from '../../auth/plugin.js';
 import * as eventsService from './service.js';
-import { listOccurrenceIdsForEvent } from '../occurrences/service.js';
-import { toAssignmentDto } from '../occurrences/routes.js';
-import { autoScheduleOccurrence } from '../scheduling/autoSchedule.js';
 
 function toRoleTemplateDto(t: {
   id: string;
@@ -126,30 +117,6 @@ export const eventsRoutes: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       await requireAdmin(request);
       return eventsService.regenerateOccurrences(request.params.id);
-    },
-  );
-
-  app.post(
-    '/api/events/:id/auto-schedule-range',
-    { schema: { params: z.object({ id: idSchema }), body: autoScheduleRangeSchema } },
-    async (request) => {
-      const session = await requireAdmin(request);
-      const { from, to, roleNames } = request.body;
-      const occurrenceIds = await listOccurrenceIdsForEvent(request.params.id, new Date(from), new Date(to));
-
-      // Sequential, not parallel: each call's fairness ranking depends on assignments made by
-      // earlier calls in this same run, exactly as it already does across one occurrence's roles.
-      const results = [];
-      for (const occurrenceId of occurrenceIds) {
-        const result = await autoScheduleOccurrence(occurrenceId, session.user.id, roleNames);
-        results.push({
-          occurrenceId: result.occurrenceId,
-          createdAssignments: result.createdAssignments.map(toAssignmentDto),
-          gaps: result.gaps,
-        });
-      }
-
-      return { eventId: request.params.id, results };
     },
   );
 };
