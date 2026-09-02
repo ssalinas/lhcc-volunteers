@@ -44,15 +44,7 @@ export const autoScheduleResultSchema = z.object({
 });
 export type AutoScheduleResult = z.infer<typeof autoScheduleResultSchema>;
 
-export const autoScheduleRangeSchema = z.object({
-  from: z.string().datetime(),
-  to: z.string().datetime(),
+export const autoScheduleOccurrenceBodySchema = z.object({
   roleNames: z.array(z.string()).optional(),
 });
-export type AutoScheduleRangeInput = z.infer<typeof autoScheduleRangeSchema>;
-
-export const autoScheduleRangeResultSchema = z.object({
-  eventId: idSchema,
-  results: z.array(autoScheduleResultSchema),
-});
-export type AutoScheduleRangeResult = z.infer<typeof autoScheduleRangeResultSchema>;
+export type AutoScheduleOccurrenceInput = z.infer<typeof autoScheduleOccurrenceBodySchema>;
