@@ -27,7 +27,9 @@ async function main() {
   }
 
   const result = await auth.api.signUpEmail({ body: { email, password, name } });
-  await db.update(user).set({ role: 'admin' }).where(eq(user.id, result.user.id));
+  // emailVerified: true so this account can also link a Google sign-in later without
+  // hitting better-auth's requireLocalEmailVerified gate — see modules/users/service.ts.
+  await db.update(user).set({ role: 'admin', emailVerified: true }).where(eq(user.id, result.user.id));
   console.log(`Created admin user ${email}.`);
 }
 

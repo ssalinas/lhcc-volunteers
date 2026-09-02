@@ -199,3 +199,12 @@ from an explicit `status: 'unavailable'`.
 - SQLite runs in WAL mode with `foreign_keys = ON` (set in `db/client.ts`); the "max one role per
   occurrence unless stackable" rule is enforced in application code (`modules/assignments/service.ts`),
   not a DB constraint — SQLite can't express that cross-table rule as one.
+- Any user row created in `modules/users/service.ts::createUser` (both the password and
+  Google-only invite branches) or `db/seed.ts` must set `emailVerified: true`. better-auth's
+  account linking has *two* separate trust gates: `accountLinking.trustedProviders` (auth/auth.ts,
+  trusts Google) and `requireLocalEmailVerified` (defaults to `true`, undocumented in this
+  codebase before it caused a real `?error=account_not_linked` bug in production) — the latter
+  additionally requires the *existing* local user to already be verified before a new provider can
+  link to it. Leaving `emailVerified: false` on an admin-created row permanently deadlocks that
+  volunteer's first Google sign-in: the row can only become verified *by* linking, which is
+  blocked *because* it isn't verified yet.

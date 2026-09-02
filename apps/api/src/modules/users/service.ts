@@ -20,13 +20,20 @@ export async function createUser(input: CreateUserInput) {
   const existing = await db.query.user.findFirst({ where: eq(user.email, input.email) });
   if (existing) throw new ConflictError('A user with this email already exists');
 
+  // emailVerified: true on both branches below — an admin typing in this email IS the
+  // verification. This also matters for a later Google sign-in against the same email:
+  // better-auth's account linking (see auth.ts) additionally requires the *existing*
+  // local user to already be emailVerified before it'll link a new provider to it
+  // (`requireLocalEmailVerified`, defaults to true) — leaving this false here would
+  // permanently deadlock that flow, since the row can only become verified *by*
+  // linking, which is blocked *because* it isn't verified yet.
   if (input.password) {
     const result = await auth.api.signUpEmail({
       body: { email: input.email, password: input.password, name: input.name },
     });
     const [updated] = await db
       .update(user)
-      .set({ role: input.role, phone: input.phone ?? null })
+      .set({ role: input.role, phone: input.phone ?? null, emailVerified: true })
       .where(eq(user.id, result.user.id))
       .returning();
     return updated;
@@ -42,7 +49,7 @@ export async function createUser(input: CreateUserInput) {
       id: newId(),
       name: input.name,
       email: input.email,
-      emailVerified: false,
+      emailVerified: true,
       role: input.role,
       phone: input.phone ?? null,
       active: true,
