@@ -20,12 +20,19 @@ function gapReason(candidates: FairnessCandidate[]): AutoScheduleGapResult['reas
  * Fills unfilled slots on every role of an occurrence, fairness-ranked and most-
  * constrained-role-first. Idempotent (only ever adds to unfilled slots) and safe
  * to re-run after manual edits. See modules/scheduling/fairness.ts for the ranking.
+ * `roleNameFilter`, when non-empty, restricts this to only roles whose name is in the
+ * set (e.g. schedule just "Singers" now, leave the rest for later) — everything else
+ * about the occurrence is left untouched.
  */
-export async function autoScheduleOccurrence(occurrenceId: string, adminUserId: string) {
+export async function autoScheduleOccurrence(occurrenceId: string, adminUserId: string, roleNameFilter?: string[]) {
   const occurrence = await getOccurrence(occurrenceId);
+  const roles =
+    roleNameFilter && roleNameFilter.length > 0
+      ? occurrence.roles.filter((r) => roleNameFilter.includes(r.name))
+      : occurrence.roles;
 
   const roleStates = await Promise.all(
-    occurrence.roles.map(async (role) => {
+    roles.map(async (role) => {
       const filled = role.assignments.filter((a) => a.status !== 'declined').length;
       const remaining = role.slotsCount - filled;
       const candidates =

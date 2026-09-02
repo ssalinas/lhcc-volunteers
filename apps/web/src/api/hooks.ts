@@ -16,6 +16,7 @@ import type {
   Event,
   OccurrenceDetail,
   OccurrenceSummary,
+  RunAvailabilityRemindersNowResult,
   RunBackupResult,
   ScheduleNotificationResult,
   TeamMember,
@@ -324,8 +325,8 @@ export function useAutoSchedule() {
 export function useAutoScheduleRange() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ eventId, from, to }: { eventId: string; from: string; to: string }) =>
-      api.post<AutoScheduleRangeResult>(`/api/events/${eventId}/auto-schedule-range`, { from, to }),
+    mutationFn: ({ eventId, from, to, roleNames }: { eventId: string; from: string; to: string; roleNames?: string[] }) =>
+      api.post<AutoScheduleRangeResult>(`/api/events/${eventId}/auto-schedule-range`, { from, to, roleNames }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['occurrences'] }),
   });
 }
@@ -334,6 +335,12 @@ export function useSendScheduleNotifications() {
   return useMutation({
     mutationFn: (occurrenceIds: string[]) =>
       api.post<ScheduleNotificationResult>('/api/schedule/notify', { occurrenceIds }),
+  });
+}
+
+export function useSendAvailabilityRemindersNow() {
+  return useMutation({
+    mutationFn: () => api.post<RunAvailabilityRemindersNowResult>('/api/admin/availability-reminders/send-now'),
   });
 }
 

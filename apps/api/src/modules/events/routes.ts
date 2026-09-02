@@ -134,14 +134,14 @@ export const eventsRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { params: z.object({ id: idSchema }), body: autoScheduleRangeSchema } },
     async (request) => {
       const session = await requireAdmin(request);
-      const { from, to } = request.body;
+      const { from, to, roleNames } = request.body;
       const occurrenceIds = await listOccurrenceIdsForEvent(request.params.id, new Date(from), new Date(to));
 
       // Sequential, not parallel: each call's fairness ranking depends on assignments made by
       // earlier calls in this same run, exactly as it already does across one occurrence's roles.
       const results = [];
       for (const occurrenceId of occurrenceIds) {
-        const result = await autoScheduleOccurrence(occurrenceId, session.user.id);
+        const result = await autoScheduleOccurrence(occurrenceId, session.user.id, roleNames);
         results.push({
           occurrenceId: result.occurrenceId,
           createdAssignments: result.createdAssignments.map(toAssignmentDto),

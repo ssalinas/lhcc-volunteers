@@ -12,3 +12,8 @@ export const scheduleNotificationResultSchema = z.object({
   occurrenceCount: z.number().int().nonnegative(),
 });
 export type ScheduleNotificationResult = z.infer<typeof scheduleNotificationResultSchema>;
+
+export const runAvailabilityRemindersNowResultSchema = z.object({
+  remindersSent: z.number().int().nonnegative(),
+});
+export type RunAvailabilityRemindersNowResult = z.infer<typeof runAvailabilityRemindersNowResultSchema>;

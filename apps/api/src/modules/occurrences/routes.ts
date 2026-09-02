@@ -65,6 +65,7 @@ export const occurrencesRoutes: FastifyPluginAsyncZod = async (app) => {
         r.assignments.some((a) => a.userId === session.user.id && a.status !== 'declined'),
       );
       const teamNames = [...new Set(occurrence.roles.map((r) => r.team.name))];
+      const roleNames = [...new Set(occurrence.roles.map((r) => r.name))];
       return {
         id: occurrence.id,
         eventId: occurrence.eventId,
@@ -78,6 +79,7 @@ export const occurrencesRoutes: FastifyPluginAsyncZod = async (app) => {
         totalSlots,
         filledSlots,
         teamNames,
+        roleNames,
         roles: occurrence.roles.map((r) => ({
           id: r.id,
           eventOccurrenceId: r.eventOccurrenceId,
