@@ -8,7 +8,10 @@ export default function AdminBatchSchedule() {
   const [fromDate, setFromDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(() => format(addWeeks(new Date(), 4), 'yyyy-MM-dd'));
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmingEvent, setConfirmingEvent] = useState<{ eventId: string; eventName: string } | null>(null);
+  const [confirmingEvent, setConfirmingEvent] = useState<{ eventId: string; eventName: string; roleNames: string[] } | null>(
+    null,
+  );
+  const [selectedRoleNames, setSelectedRoleNames] = useState<Set<string>>(new Set());
   const [autoScheduleMessage, setAutoScheduleMessage] = useState<string | null>(null);
   const [showNotifyConfirm, setShowNotifyConfirm] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
@@ -28,7 +31,12 @@ export default function AdminBatchSchedule() {
       group.occurrences.push(o);
       byEvent.set(o.eventId, group);
     }
-    return [...byEvent.values()].sort((a, b) => a.eventName.localeCompare(b.eventName));
+    return [...byEvent.values()]
+      .map((group) => ({
+        ...group,
+        roleNames: [...new Set(group.occurrences.flatMap((o) => o.roleNames))].sort(),
+      }))
+      .sort((a, b) => a.eventName.localeCompare(b.eventName));
   }, [occurrences]);
 
   const selectedEventCount = new Set(
@@ -47,8 +55,9 @@ export default function AdminBatchSchedule() {
   function handleAutoScheduleConfirm() {
     if (!confirmingEvent) return;
     setAutoScheduleMessage(null);
+    const roleNames = selectedRoleNames.size < confirmingEvent.roleNames.length ? [...selectedRoleNames] : undefined;
     autoScheduleRange.mutate(
-      { eventId: confirmingEvent.eventId, from: fromISO, to: toISO },
+      { eventId: confirmingEvent.eventId, from: fromISO, to: toISO, roleNames },
       {
         onSuccess: (result) => {
           const filled = result.results.reduce((sum, r) => sum + r.createdAssignments.length, 0);
@@ -61,6 +70,15 @@ export default function AdminBatchSchedule() {
         },
       },
     );
+  }
+
+  function toggleRoleName(roleName: string) {
+    setSelectedRoleNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleName)) next.delete(roleName);
+      else next.add(roleName);
+      return next;
+    });
   }
 
   function handleSendNotifications() {
@@ -118,7 +136,10 @@ export default function AdminBatchSchedule() {
                 <strong>{group.eventName}</strong>
                 <button
                   type="button"
-                  onClick={() => setConfirmingEvent({ eventId: group.eventId, eventName: group.eventName })}
+                  onClick={() => {
+                    setConfirmingEvent({ eventId: group.eventId, eventName: group.eventName, roleNames: group.roleNames });
+                    setSelectedRoleNames(new Set(group.roleNames));
+                  }}
                   className="btn btn-secondary btn-sm"
                 >
                   Auto-schedule this range
@@ -179,6 +200,23 @@ export default function AdminBatchSchedule() {
               <strong>{fromDate}</strong> and <strong>{toDate}</strong>? This only adds to unfilled slots — it won't
               change existing assignments.
             </p>
+            {confirmingEvent.roleNames.length > 1 && (
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>Roles to schedule</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {confirmingEvent.roleNames.map((roleName) => (
+                    <label key={roleName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRoleNames.has(roleName)}
+                        onChange={() => toggleRoleName(roleName)}
+                      />
+                      {roleName}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
               <button type="button" onClick={() => setConfirmingEvent(null)} className="btn btn-secondary">
                 Cancel
@@ -186,7 +224,7 @@ export default function AdminBatchSchedule() {
               <button
                 type="button"
                 onClick={handleAutoScheduleConfirm}
-                disabled={autoScheduleRange.isPending}
+                disabled={autoScheduleRange.isPending || selectedRoleNames.size === 0}
                 className="btn btn-primary"
               >
                 {autoScheduleRange.isPending ? 'Scheduling…' : 'Auto-schedule'}

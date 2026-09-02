@@ -3,7 +3,8 @@ import { addDays, format } from 'date-fns';
 import type { AvailabilityStatus } from '@lhcc/shared';
 import { useOccurrences, useAvailabilityFor, useSetAvailabilityForDate, useClearAvailabilityForDate } from '../api/hooks.js';
 
-const HORIZON_DAYS = 60; // "next 2 months at maximum"
+const HORIZON_DAYS = 120; // "next 4 months at maximum" — the automated reminder only nags about
+// the next 2 (jobs/sendAvailabilityReminders.ts), so filling in further ahead means fewer trips.
 const PAGE_SIZE = 10;
 
 /**
@@ -22,16 +23,15 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
   const [page, setPage] = useState(0);
 
   const dates = useMemo(() => {
-    const byDate = new Map<string, { eventNames: Set<string>; teamNames: Set<string> }>();
+    const byDate = new Map<string, Set<string>>();
     for (const o of occurrences ?? []) {
       const key = format(new Date(o.startAt), 'yyyy-MM-dd');
-      const entry = byDate.get(key) ?? { eventNames: new Set<string>(), teamNames: new Set<string>() };
-      entry.eventNames.add(o.eventName);
-      for (const teamName of o.teamNames) entry.teamNames.add(teamName);
+      const entry = byDate.get(key) ?? new Set<string>();
+      entry.add(o.eventName);
       byDate.set(key, entry);
     }
     return [...byDate.entries()]
-      .map(([date, { eventNames, teamNames }]) => ({ date, eventNames: [...eventNames], teamNames: [...teamNames] }))
+      .map(([date, eventNames]) => ({ date, eventNames: [...eventNames] }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [occurrences]);
 
@@ -65,7 +65,7 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {pageDates.map(({ date, eventNames, teamNames }) => {
+        {pageDates.map(({ date, eventNames }) => {
           const status = statusByDate.get(date);
           return (
             <div
@@ -77,17 +77,12 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: '0.5rem',
-                padding: '0.65rem 1.1rem',
+                padding: '0.5rem 1.1rem',
               }}
             >
-              <div>
-                <div style={{ fontWeight: 600 }}>{format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}</div>
-                <div style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{eventNames.join(', ')}</div>
-                {teamNames.length > 0 && (
-                  <div style={{ color: 'var(--color-primary)', fontSize: '0.78rem', marginTop: '0.15rem' }}>
-                    Needed: {teamNames.join(', ')}
-                  </div>
-                )}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600 }}>{format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}</span>
+                <span style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{eventNames.join(', ')}</span>
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <ToggleButton active={status === 'available'} variant="success" onClick={() => toggle(date, 'available')}>

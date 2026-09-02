@@ -47,6 +47,7 @@ export type AutoScheduleResult = z.infer<typeof autoScheduleResultSchema>;
 export const autoScheduleRangeSchema = z.object({
   from: z.string().datetime(),
   to: z.string().datetime(),
+  roleNames: z.array(z.string()).optional(),
 });
 export type AutoScheduleRangeInput = z.infer<typeof autoScheduleRangeSchema>;
 

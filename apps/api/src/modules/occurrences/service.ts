@@ -28,6 +28,7 @@ export async function listOccurrences(from: Date, to: Date, currentUserId?: stri
       ? o.roles.some((r) => r.assignments.some((a) => a.userId === currentUserId && a.status !== 'declined'))
       : false;
     const teamNames = [...new Set(o.roles.map((r) => r.team.name))];
+    const roleNames = [...new Set(o.roles.map((r) => r.name))];
     return {
       id: o.id,
       eventId: o.eventId,
@@ -40,6 +41,7 @@ export async function listOccurrences(from: Date, to: Date, currentUserId?: stri
       totalSlots,
       filledSlots,
       teamNames,
+      roleNames,
     };
   });
 }

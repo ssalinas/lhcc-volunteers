@@ -9,6 +9,7 @@ import { newId } from '../lib/ids.js';
 import { env } from '../config/env.js';
 
 const WINDOW_MONTHS = 2;
+const MANUAL_WINDOW_MONTHS = 1;
 const FOLLOWUP_INTERVAL_DAYS = 2;
 const MAX_REMINDERS = 4;
 // Self-healing proxy for "end of month": the real guard against double-kickoff is "no cycle
@@ -114,4 +115,26 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
 
   logger?.info({ ...result }, 'Availability reminder cycle complete');
   return result;
+}
+
+/**
+ * Ad-hoc, admin-triggered nudge — independent of the monthly cycle above (doesn't read or
+ * write `availability_reminder_cycles`, so it can't perturb the automated cadence/counts).
+ * Sends to every active user with unset availability dates in the next month.
+ */
+export async function sendAvailabilityRemindersNow(logger?: ReminderLogger): Promise<{ remindersSent: number }> {
+  const today = new Date();
+  const windowEnd = addMonths(today, MANUAL_WINDOW_MONTHS);
+
+  const activeUsers = await db.query.user.findMany({ where: eq(user.active, true) });
+  let remindersSent = 0;
+  for (const u of activeUsers) {
+    const gaps = await getUnsetAvailabilityDates(u.id, today, windowEnd);
+    if (gaps.length === 0) continue;
+    await sendMail({ to: u.email, ...renderReminderEmail(u.name, gaps) });
+    remindersSent++;
+  }
+
+  logger?.info({ remindersSent }, 'Manual availability reminder send complete');
+  return { remindersSent };
 }

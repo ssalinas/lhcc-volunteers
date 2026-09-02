@@ -59,7 +59,12 @@ frontend hook together.
 ### API structure (`apps/api/src`)
 
 - `modules/<domain>/{routes.ts,service.ts}` — one pair per domain (assignments, availability,
-  backups, events, occurrences, reports, scheduleNotifications, scheduling, teams, users).
+  backups, events, notifications, occurrences, reports, scheduleNotifications, scheduling, teams,
+  users). `modules/notifications` is a thin wrapper exposing one admin action,
+  `POST /api/admin/availability-reminders/send-now`, which calls `jobs/sendAvailabilityReminders.ts`'s
+  `sendAvailabilityRemindersNow()` — an ad-hoc, 1-month-window nudge that deliberately does **not**
+  read or write `availability_reminder_cycles`, so it can't perturb the automated monthly cycle's
+  own state/counts.
   `routes.ts` handles auth/validation and DTO shaping; `service.ts` holds the Drizzle queries (or,
   for `backups`, calls into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB table backing
   it). Admin-only routes call `requireAdmin(request)` from `auth/plugin.ts`; anyone-authenticated
@@ -114,6 +119,13 @@ frontend hook together.
   a soft "don't repeat consecutive weeks" preference, inserted before the `lastServedAt` tiebreak
   since it's deliberately targeted at this one event rather than global history. It never excludes
   a candidate, so a small volunteer pool can still repeat when nobody else is available.
+  `autoScheduleOccurrence` also takes an optional `roleNameFilter?: string[]` — when set, only
+  roles whose `name` is in that list get processed (e.g. schedule just "Singers" now, leave
+  "Greeters" for later); `POST /api/events/:id/auto-schedule-range`'s `roleNames` body field
+  threads through to every occurrence in the batch. Role names for the filter UI come from each
+  occurrence's own materialized `volunteer_roles` (`roleNames` on `OccurrenceSummary`, mirroring
+  the existing `teamNames` field) rather than `event_role_templates`, so it works for one-off
+  events' ad-hoc roles too, not just recurring events' templated ones.
   `modules/scheduling/availabilityGaps.ts` sits alongside them for the same reason (crosses
   teams/occurrences/availability) — `getUnsetAvailabilityDates()` finds occurrences a user's teams
   are involved in where they have **no** availability row at all, which is a different predicate
@@ -152,8 +164,20 @@ from an explicit `status: 'unavailable'`.
   data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers who
   click through from the Calendar). `/admin/schedule` (`BatchSchedule.tsx`) groups occurrences
   across every event in an admin-chosen date range, letting an admin auto-schedule a whole event's
-  range in one action and select occurrences (across different events) to notify all their teams'
-  members about at once — reuses the existing `useOccurrences` feed rather than a dedicated one.
+  range (optionally scoped to specific role names via a checklist in the confirm modal) in one
+  action, and select occurrences (across different events) to notify all their teams' members
+  about at once — reuses the existing `useOccurrences` feed rather than a dedicated one.
+  `/admin/reports`'s "Notifications" section has two cards in the same vein: one triggers
+  `sendAvailabilityRemindersNow` directly; the other ("Remind chosen volunteers") is a
+  frontend-only quick-access wrapper around `/admin/schedule`'s same notify mechanism
+  (`POST /api/schedule/notify`) — pick event(s), it auto-selects their occurrences in the next
+  month via `useOccurrences` instead of requiring the admin to check off occurrences by hand.
+- `components/AvailabilityDateList.tsx`'s `HORIZON_DAYS` (how far out volunteers can respond) is
+  intentionally wider than `jobs/sendAvailabilityReminders.ts`'s `WINDOW_MONTHS` (how far out the
+  automated reminder nags) — filling in further ahead than the reminder's own window means fewer
+  trips back to the page. It also deliberately doesn't show per-date team/role names (unlike
+  `OccurrenceSummary.teamNames`/`roleNames`, which the admin-facing pages do show) — a volunteer
+  choosing Available/Unavailable doesn't need that to make the decision.
 - `index.css` — design tokens (CSS custom properties for the church's brand colors/fonts) plus
   utility classes (`.btn`/`.btn-primary`/`.btn-secondary`/`.btn-ghost`/`.btn-danger`, `.card`,
   `.badge`/`.badge-success`/`.badge-warning`/`.badge-danger`). Use these instead of ad hoc inline
