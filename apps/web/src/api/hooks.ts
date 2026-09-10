@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  AutoScheduleRangeResult,
   AutoScheduleResult,
   AvailabilityEntry,
   AvailabilityStatus,
@@ -330,11 +329,18 @@ export function useAutoSchedule() {
   });
 }
 
-export function useAutoScheduleRange() {
+export function useAutoScheduleSelected() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ eventId, from, to, roleNames }: { eventId: string; from: string; to: string; roleNames?: string[] }) =>
-      api.post<AutoScheduleRangeResult>(`/api/events/${eventId}/auto-schedule-range`, { from, to, roleNames }),
+    mutationFn: async ({ occurrenceIds, roleNames }: { occurrenceIds: string[]; roleNames?: string[] }) => {
+      // Sequential, not parallel: each call's fairness ranking depends on assignments made by
+      // earlier calls in this same run, exactly as it already does across one occurrence's roles.
+      const results: AutoScheduleResult[] = [];
+      for (const occurrenceId of occurrenceIds) {
+        results.push(await api.post<AutoScheduleResult>(`/api/occurrences/${occurrenceId}/auto-schedule`, { roleNames }));
+      }
+      return results;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['occurrences'] }),
   });
 }

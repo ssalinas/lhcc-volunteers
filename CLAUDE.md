@@ -72,12 +72,15 @@ frontend hook together.
   route file per domain, one concern" — `POST /api/schedule/notify` emails every active member of
   every team involved in a batch of occurrences (not just who's assigned) the full named roster,
   via `lib/mailer.ts`, and logs the send in `schedule_notification_batches` +
-  `..._batch_occurrences` + `..._recipients` for audit/dedup purposes. Its sibling batch-scheduling
-  endpoint, `POST /api/events/:id/auto-schedule-range`, lives in `modules/events/routes.ts` instead
-  (next to the existing `regenerate-occurrences` sub-action) since it's scoped to one event — it
-  loops `autoScheduleOccurrence` sequentially over every occurrence in a date range, which works
-  unmodified because fairness ranking re-queries the DB each call and so already sees assignments
-  made earlier in the same run.
+  `..._batch_occurrences` + `..._recipients` for audit/dedup purposes. There's deliberately no
+  separate "batch" auto-schedule endpoint — the Batch Schedule page instead loops the existing
+  `POST /api/occurrences/:id/auto-schedule` once per selected occurrence id (frontend-side, in
+  `useAutoScheduleSelected`), same as `POST /api/schedule/notify` already takes an explicit
+  `occurrenceIds` list — this is what keeps the two actions in sync with exactly the same
+  checkbox selection instead of one respecting it and the other operating on a whole date range
+  regardless of which boxes are checked (a real bug fixed once already). Sequential, not
+  parallel: `autoScheduleOccurrence`'s fairness ranking re-queries the DB each call, so it already
+  sees assignments made earlier in the same run.
 - `db/schema/auth.schema.ts` — hand-written to match what `@better-auth/cli generate` would produce
   (user/session/account/verification), extended with better-auth's `additionalFields` (`role`,
   `phone`, `active` on `user`). These additionalFields **are** returned directly on
@@ -121,11 +124,11 @@ frontend hook together.
   a candidate, so a small volunteer pool can still repeat when nobody else is available.
   `autoScheduleOccurrence` also takes an optional `roleNameFilter?: string[]` — when set, only
   roles whose `name` is in that list get processed (e.g. schedule just "Singers" now, leave
-  "Greeters" for later); `POST /api/events/:id/auto-schedule-range`'s `roleNames` body field
-  threads through to every occurrence in the batch. Role names for the filter UI come from each
-  occurrence's own materialized `volunteer_roles` (`roleNames` on `OccurrenceSummary`, mirroring
-  the existing `teamNames` field) rather than `event_role_templates`, so it works for one-off
-  events' ad-hoc roles too, not just recurring events' templated ones.
+  "Greeters" for later); `POST /api/occurrences/:id/auto-schedule`'s optional `roleNames` body
+  field passes straight through. Role names for the filter UI come from each occurrence's own
+  materialized `volunteer_roles` (`roleNames` on `OccurrenceSummary`, mirroring the existing
+  `teamNames` field) rather than `event_role_templates`, so it works for one-off events' ad-hoc
+  roles too, not just recurring events' templated ones.
   `modules/scheduling/availabilityGaps.ts` sits alongside them for the same reason (crosses
   teams/occurrences/availability) — `getUnsetAvailabilityDates()` finds occurrences a user's teams
   are involved in where they have **no** availability row at all, which is a different predicate
@@ -163,10 +166,12 @@ from an explicit `status: 'unavailable'`.
   `App.tsx` (`RequireAuth` for anyone-signed-in routes). Occurrences have two views over the same
   data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers who
   click through from the Calendar). `/admin/schedule` (`BatchSchedule.tsx`) groups occurrences
-  across every event in an admin-chosen date range, letting an admin auto-schedule a whole event's
-  range (optionally scoped to specific role names via a checklist in the confirm modal) in one
-  action, and select occurrences (across different events) to notify all their teams' members
-  about at once — reuses the existing `useOccurrences` feed rather than a dedicated one.
+  across every event in an admin-chosen date range with a checkbox per occurrence (plus a
+  "Select all" per event group); both bottom-bar actions — "Auto-schedule selected" and "Send
+  schedule notification" — operate on exactly that same `selected` set (optionally scoped to
+  specific role names via a checklist in the auto-schedule confirm modal, computed as the union
+  of role names across everything selected). Reuses the existing `useOccurrences` feed rather
+  than a dedicated one.
   `/admin/reports`'s "Notifications" section has two cards in the same vein: one triggers
   `sendAvailabilityRemindersNow` directly; the other ("Remind chosen volunteers") is a
   frontend-only quick-access wrapper around `/admin/schedule`'s same notify mechanism

@@ -1,6 +1,12 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { createVolunteerRoleSchema, dateRangeQuerySchema, idSchema, updateOccurrenceSchema } from '@lhcc/shared';
+import {
+  autoScheduleOccurrenceBodySchema,
+  createVolunteerRoleSchema,
+  dateRangeQuerySchema,
+  idSchema,
+  updateOccurrenceSchema,
+} from '@lhcc/shared';
 import { requireAdmin, requireAuth } from '../../auth/plugin.js';
 import * as occurrencesService from './service.js';
 import { getFairnessRankedCandidates } from '../scheduling/fairness.js';
@@ -139,10 +145,10 @@ export const occurrencesRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.post(
     '/api/occurrences/:id/auto-schedule',
-    { schema: { params: z.object({ id: idSchema }) } },
+    { schema: { params: z.object({ id: idSchema }), body: autoScheduleOccurrenceBodySchema.optional() } },
     async (request) => {
       const session = await requireAdmin(request);
-      const result = await autoScheduleOccurrence(request.params.id, session.user.id);
+      const result = await autoScheduleOccurrence(request.params.id, session.user.id, request.body?.roleNames);
       return {
         occurrenceId: result.occurrenceId,
         createdAssignments: result.createdAssignments.map(toAssignmentDto),
