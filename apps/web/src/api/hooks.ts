@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AutoScheduleResult,
   AvailabilityEntry,
+  AvailabilityReminderStatus,
   AvailabilityStatus,
   BackupStatus,
   CoverageGapEntry,
@@ -13,6 +14,7 @@ import type {
   CreateVolunteerRoleInput,
   EligibleCandidate,
   Event,
+  EventLastNotified,
   OccurrenceDetail,
   OccurrenceSummary,
   RunAvailabilityRemindersNowResult,
@@ -346,15 +348,33 @@ export function useAutoScheduleSelected() {
 }
 
 export function useSendScheduleNotifications() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (occurrenceIds: string[]) =>
       api.post<ScheduleNotificationResult>('/api/schedule/notify', { occurrenceIds }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'schedule-notifications', 'last-sent'] }),
+  });
+}
+
+export function useEventsLastNotified() {
+  return useQuery({
+    queryKey: ['admin', 'schedule-notifications', 'last-sent'],
+    queryFn: () => api.get<EventLastNotified[]>('/api/admin/schedule-notifications/last-sent'),
   });
 }
 
 export function useSendAvailabilityRemindersNow() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<RunAvailabilityRemindersNowResult>('/api/admin/availability-reminders/send-now'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'availability-reminders', 'status'] }),
+  });
+}
+
+export function useAvailabilityReminderStatus() {
+  return useQuery({
+    queryKey: ['admin', 'availability-reminders', 'status'],
+    queryFn: () => api.get<AvailabilityReminderStatus>('/api/admin/availability-reminders/status'),
   });
 }
 

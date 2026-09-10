@@ -7,4 +7,14 @@ export const notificationsRoutes: FastifyPluginAsyncZod = async (app) => {
     await requireAdmin(request);
     return notificationsService.triggerAvailabilityRemindersNow(app.log);
   });
+
+  app.get('/api/admin/availability-reminders/status', async (request) => {
+    await requireAdmin(request);
+    const status = await notificationsService.getAvailabilityReminderStatus();
+    return {
+      lastSentAt: status.lastSentAt ? status.lastSentAt.toISOString() : null,
+      remindersSent: status.remindersSent,
+      triggeredBy: status.triggeredBy,
+    };
+  });
 };

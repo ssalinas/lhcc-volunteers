@@ -17,3 +17,16 @@ export const runAvailabilityRemindersNowResultSchema = z.object({
   remindersSent: z.number().int().nonnegative(),
 });
 export type RunAvailabilityRemindersNowResult = z.infer<typeof runAvailabilityRemindersNowResultSchema>;
+
+export const availabilityReminderStatusSchema = z.object({
+  lastSentAt: z.string().datetime().nullable(),
+  remindersSent: z.number().int().nonnegative().nullable(),
+  triggeredBy: z.enum(['cron', 'manual']).nullable(),
+});
+export type AvailabilityReminderStatus = z.infer<typeof availabilityReminderStatusSchema>;
+
+export const eventLastNotifiedSchema = z.object({
+  eventId: idSchema,
+  lastSentAt: z.string().datetime(),
+});
+export type EventLastNotified = z.infer<typeof eventLastNotifiedSchema>;

@@ -195,6 +195,20 @@ export const availabilityReminderCycles = sqliteTable(
   ],
 );
 
+// One row per non-empty availability-reminder send (cron kickoff/followup batch, or a manual
+// "send now"). Deliberately separate from availability_reminder_cycles (which tracks per-user
+// cycle progress) — this is just a lightweight "when did we last actually email anyone" log for
+// admin visibility, and manual sends don't touch the cycle table at all (see
+// jobs/sendAvailabilityReminders.ts), so this is the only place that captures both.
+export const availabilityReminderSends = sqliteTable('availability_reminder_sends', {
+  id: text('id').primaryKey(),
+  remindersSent: integer('reminders_sent').notNull(),
+  triggeredBy: text('triggered_by', { enum: ['cron', 'manual'] }).notNull(),
+  sentAt: integer('sent_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 // ---------- Schedule Notifications ----------
 
 export const scheduleNotificationBatches = sqliteTable('schedule_notification_batches', {

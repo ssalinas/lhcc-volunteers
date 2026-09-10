@@ -1,12 +1,19 @@
-import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { signOut, useSession } from '../auth/client.js';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { data } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
   const role = (data?.user as { role?: string } | undefined)?.role;
   const isAdmin = role === 'admin';
+
+  // Collapse the mobile menu automatically whenever the route changes.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   async function handleSignOut() {
     await signOut();
@@ -20,15 +27,26 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <img src="/logo.png" alt="" style={styles.logo} />
           <span>LHCC Volunteers</span>
         </div>
-        <nav style={styles.nav}>
+        <button
+          type="button"
+          className="nav-toggle btn btn-secondary btn-sm"
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+          style={{ display: 'none', marginLeft: 'auto' }}
+        >
+          {menuOpen ? '✕' : '☰'}
+        </button>
+        <nav className={`app-nav${menuOpen ? ' open' : ''}`} style={styles.nav}>
           <NavItem to="/">Calendar</NavItem>
           <NavItem to="/availability">Availability</NavItem>
           <NavItem to="/teams">Teams</NavItem>
           {isAdmin && (
             <>
-              <span style={styles.navSep} />
+              <span className="nav-sep" style={styles.navSep} />
               <NavItem to="/admin/events">Events</NavItem>
               <NavItem to="/admin/schedule">Batch Schedule</NavItem>
+              <NavItem to="/admin/reminders">Reminders</NavItem>
               <NavItem to="/admin/teams">Manage Teams</NavItem>
               <NavItem to="/admin/users">Users</NavItem>
               <NavItem to="/admin/reports">Reports</NavItem>

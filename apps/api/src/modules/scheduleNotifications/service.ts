@@ -1,10 +1,12 @@
 import { format } from 'date-fns';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { newId } from '../../lib/ids.js';
 import { sendMail } from '../../lib/mailer.js';
 import * as occurrencesService from '../occurrences/service.js';
 import * as teamsService from '../teams/service.js';
 import {
+  eventOccurrences,
   scheduleNotificationBatches,
   scheduleNotificationBatchOccurrences,
   scheduleNotificationRecipients,
@@ -126,4 +128,23 @@ export async function sendScheduleNotifications(occurrenceIds: string[], sentByU
   }
 
   return { batchId, recipientCount: recipients.size, occurrenceCount: occurrenceIds.length };
+}
+
+/** Most recent notification batch touching each event, keyed by eventId, for admin visibility. */
+export async function getLastNotifiedByEvent(): Promise<Record<string, Date>> {
+  const rows = await db
+    .select({
+      eventId: eventOccurrences.eventId,
+      lastSentAt: sql<number>`max(${scheduleNotificationBatches.createdAt})`,
+    })
+    .from(scheduleNotificationBatchOccurrences)
+    .innerJoin(eventOccurrences, eq(eventOccurrences.id, scheduleNotificationBatchOccurrences.eventOccurrenceId))
+    .innerJoin(scheduleNotificationBatches, eq(scheduleNotificationBatches.id, scheduleNotificationBatchOccurrences.batchId))
+    .groupBy(eventOccurrences.eventId);
+
+  const byEvent: Record<string, Date> = {};
+  for (const row of rows) {
+    byEvent[row.eventId] = new Date(row.lastSentAt * 1000);
+  }
+  return byEvent;
 }
