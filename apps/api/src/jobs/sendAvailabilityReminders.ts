@@ -2,7 +2,7 @@ import { addMonths, differenceInCalendarDays, format } from 'date-fns';
 import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { user } from '../db/schema/auth.schema.js';
-import { availabilityReminderCycles } from '../db/schema/core.schema.js';
+import { availabilityReminderCycles, availabilityReminderSends } from '../db/schema/core.schema.js';
 import { getUnsetAvailabilityDates, type AvailabilityGap } from '../modules/scheduling/availabilityGaps.js';
 import { sendMail } from '../lib/mailer.js';
 import { newId } from '../lib/ids.js';
@@ -113,6 +113,11 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
     if (exhausted) result.exhausted++;
   }
 
+  const totalSent = result.kickoffsSent + result.followupsSent;
+  if (totalSent > 0) {
+    await db.insert(availabilityReminderSends).values({ id: newId(), remindersSent: totalSent, triggeredBy: 'cron' });
+  }
+
   logger?.info({ ...result }, 'Availability reminder cycle complete');
   return result;
 }
@@ -135,6 +140,19 @@ export async function sendAvailabilityRemindersNow(logger?: ReminderLogger): Pro
     remindersSent++;
   }
 
+  if (remindersSent > 0) {
+    await db.insert(availabilityReminderSends).values({ id: newId(), remindersSent, triggeredBy: 'manual' });
+  }
+
   logger?.info({ remindersSent }, 'Manual availability reminder send complete');
   return { remindersSent };
+}
+
+/** Most recent non-empty send (cron or manual), for admin visibility. */
+export async function getLastAvailabilityReminderSend() {
+  const [last] = await db.query.availabilityReminderSends.findMany({
+    orderBy: (t, { desc }) => [desc(t.sentAt)],
+    limit: 1,
+  });
+  return last ?? null;
 }

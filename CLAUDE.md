@@ -60,27 +60,32 @@ frontend hook together.
 
 - `modules/<domain>/{routes.ts,service.ts}` — one pair per domain (assignments, availability,
   backups, events, notifications, occurrences, reports, scheduleNotifications, scheduling, teams,
-  users). `modules/notifications` is a thin wrapper exposing one admin action,
-  `POST /api/admin/availability-reminders/send-now`, which calls `jobs/sendAvailabilityReminders.ts`'s
-  `sendAvailabilityRemindersNow()` — an ad-hoc, 1-month-window nudge that deliberately does **not**
-  read or write `availability_reminder_cycles`, so it can't perturb the automated monthly cycle's
-  own state/counts.
-  `routes.ts` handles auth/validation and DTO shaping; `service.ts` holds the Drizzle queries (or,
-  for `backups`, calls into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB table backing
-  it). Admin-only routes call `requireAdmin(request)` from `auth/plugin.ts`; anyone-authenticated
-  routes call `requireAuth(request)`. `modules/scheduleNotifications` is the one exception to "one
-  route file per domain, one concern" — `POST /api/schedule/notify` emails every active member of
-  every team involved in a batch of occurrences (not just who's assigned) the full named roster,
-  via `lib/mailer.ts`, and logs the send in `schedule_notification_batches` +
-  `..._batch_occurrences` + `..._recipients` for audit/dedup purposes. There's deliberately no
-  separate "batch" auto-schedule endpoint — the Batch Schedule page instead loops the existing
-  `POST /api/occurrences/:id/auto-schedule` once per selected occurrence id (frontend-side, in
-  `useAutoScheduleSelected`), same as `POST /api/schedule/notify` already takes an explicit
-  `occurrenceIds` list — this is what keeps the two actions in sync with exactly the same
-  checkbox selection instead of one respecting it and the other operating on a whole date range
-  regardless of which boxes are checked (a real bug fixed once already). Sequential, not
-  parallel: `autoScheduleOccurrence`'s fairness ranking re-queries the DB each call, so it already
-  sees assignments made earlier in the same run.
+  users). `routes.ts` handles auth/validation and DTO shaping; `service.ts` holds the Drizzle
+  queries (or, for `backups`, calls into `jobs/backupDb.ts` + `lib/r2.ts` directly — there's no DB
+  table backing it). Admin-only routes call `requireAdmin(request)` from `auth/plugin.ts`;
+  anyone-authenticated routes call `requireAuth(request)`.
+  `modules/notifications` wraps `jobs/sendAvailabilityReminders.ts`'s admin-facing surface:
+  `POST /api/admin/availability-reminders/send-now` calls `sendAvailabilityRemindersNow()` — an
+  ad-hoc, 1-month-window nudge that deliberately does **not** read or write
+  `availability_reminder_cycles`, so it can't perturb the automated monthly cycle's own
+  state/counts; `GET /api/admin/availability-reminders/status` reads the last send (cron or
+  manual) from `availability_reminder_sends`, a separate append-only log both send paths write to
+  specifically so "last sent" reflects either one, not just the cycle table.
+  `modules/scheduleNotifications` is the one exception to "one route file per domain, one
+  concern" — `POST /api/schedule/notify` emails every active member of every team involved in a
+  batch of occurrences (not just who's assigned) the full named roster, via `lib/mailer.ts`, and
+  logs the send in `schedule_notification_batches` + `..._batch_occurrences` + `..._recipients`
+  for audit/dedup purposes; `GET /api/admin/schedule-notifications/last-sent` aggregates that log
+  by event (`getLastNotifiedByEvent`, `MAX(createdAt)` grouped through the batch-occurrences join)
+  for the same kind of admin visibility. There's deliberately no separate "batch" auto-schedule
+  endpoint — the frontend instead loops the existing `POST /api/occurrences/:id/auto-schedule`
+  once per selected occurrence id (`useAutoScheduleSelected`), the same way
+  `POST /api/schedule/notify` already takes an explicit `occurrenceIds` list — both are driven by
+  an identical "check off occurrences, grouped by event" selection model (see
+  `components/OccurrencePicker.tsx` below) instead of one respecting a checkbox selection and the
+  other operating on a whole date range regardless of which boxes are checked (a real bug fixed
+  once already). Sequential, not parallel: `autoScheduleOccurrence`'s fairness ranking re-queries
+  the DB each call, so it already sees assignments made earlier in the same run.
 - `db/schema/auth.schema.ts` — hand-written to match what `@better-auth/cli generate` would produce
   (user/session/account/verification), extended with better-auth's `additionalFields` (`role`,
   `phone`, `active` on `user`). These additionalFields **are** returned directly on
@@ -165,18 +170,24 @@ from an explicit `status: 'unavailable'`.
 - `routes/` — volunteer-facing pages; `routes/admin/` — admin-only pages, gated by `RequireAdmin` in
   `App.tsx` (`RequireAuth` for anyone-signed-in routes). Occurrences have two views over the same
   data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers who
-  click through from the Calendar). `/admin/schedule` (`BatchSchedule.tsx`) groups occurrences
-  across every event in an admin-chosen date range with a checkbox per occurrence (plus a
-  "Select all" per event group); both bottom-bar actions — "Auto-schedule selected" and "Send
-  schedule notification" — operate on exactly that same `selected` set (optionally scoped to
-  specific role names via a checklist in the auto-schedule confirm modal, computed as the union
-  of role names across everything selected). Reuses the existing `useOccurrences` feed rather
-  than a dedicated one.
-  `/admin/reports`'s "Notifications" section has two cards in the same vein: one triggers
-  `sendAvailabilityRemindersNow` directly; the other ("Remind chosen volunteers") is a
-  frontend-only quick-access wrapper around `/admin/schedule`'s same notify mechanism
-  (`POST /api/schedule/notify`) — pick event(s), it auto-selects their occurrences in the next
-  month via `useOccurrences` instead of requiring the admin to check off occurrences by hand.
+  click through from the Calendar).
+  `components/OccurrencePicker.tsx` factors out "pick a date range, then check off occurrences
+  grouped by event (with a 'Select all' per group)" into `useOccurrencePicker()` +
+  `<DateRangeFields>` + `<OccurrenceGroupList>`, shared by two pages that both need exactly this:
+  `/admin/schedule` (`BatchSchedule.tsx` — "Auto-schedule selected", optionally scoped to specific
+  role names via a checklist in the confirm modal, computed as the union of role names across
+  everything selected) and `/admin/reminders`'s "Custom schedule notification" section (`POST
+  /api/schedule/notify`, same `useOccurrencePicker` instance pattern, its own separate state).
+  Every email-sending action in the app lives on `/admin/reminders` (`Reminders.tsx`) — nothing
+  outside that page calls `useSendAvailabilityRemindersNow`/`useSendScheduleNotifications` — and
+  every one of them is gated by a confirm `Modal` before sending, never a bare button. Three
+  sections: an Availability Reminders card (`sendAvailabilityRemindersNow`, "Send now" is a
+  1-month-window nudge separate from the automated cycle — see below — and shows the last send's
+  time/count/trigger from `GET /api/admin/availability-reminders/status`); a "Remind chosen
+  volunteers" card (quick, event-based, auto-scoped to the next month, with a per-event
+  "notified Xh ago" badge from `GET /api/admin/schedule-notifications/last-sent`); and the
+  "Custom schedule notification" section (moved from Batch Schedule) for hand-picking specific
+  occurrences across any date range instead of the quick per-event shortcut.
 - `components/AvailabilityDateList.tsx`'s `HORIZON_DAYS` (how far out volunteers can respond) is
   intentionally wider than `jobs/sendAvailabilityReminders.ts`'s `WINDOW_MONTHS` (how far out the
   automated reminder nags) — filling in further ahead than the reminder's own window means fewer
@@ -186,7 +197,10 @@ from an explicit `status: 'unavailable'`.
 - `index.css` — design tokens (CSS custom properties for the church's brand colors/fonts) plus
   utility classes (`.btn`/`.btn-primary`/`.btn-secondary`/`.btn-ghost`/`.btn-danger`, `.card`,
   `.badge`/`.badge-success`/`.badge-warning`/`.badge-danger`). Use these instead of ad hoc inline
-  hex colors when adding UI.
+  hex colors when adding UI. Also the one place with real `@media (max-width: 640px)` rules —
+  `AppLayout.tsx`'s nav can't collapse via inline styles alone (no media queries there), so it
+  hides `.app-nav` and shows a `.nav-toggle` hamburger button behind that breakpoint, toggled by
+  local `menuOpen` state that also resets on every route change.
 - `components/StackedBarChart.tsx` is a hand-rolled CSS bar chart, not a charting library —
   `recharts` (both v2 and v3) renders invisible/broken bars in this environment; don't reintroduce it.
 

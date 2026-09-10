@@ -236,4 +236,25 @@ input[type='checkbox'] {
   .calendar-weekday-label {
     font-size: 0.65rem !important;
   }
+
+  .nav-toggle {
+    display: inline-flex !important;
+  }
+
+  .app-nav {
+    display: none !important;
+    width: 100%;
+    order: 10;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.15rem !important;
+  }
+
+  .app-nav.open {
+    display: flex !important;
+  }
+
+  .app-nav .nav-sep {
+    display: none;
+  }
 }
