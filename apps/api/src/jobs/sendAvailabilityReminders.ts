@@ -59,7 +59,9 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
   const result: ReminderCycleResult = { kickoffsSent: 0, followupsSent: 0, resolved: 0, exhausted: 0 };
 
   if (today.getDate() >= KICKOFF_DAY_OF_MONTH) {
-    const activeUsers = await db.query.user.findMany({ where: eq(user.active, true) });
+    const activeUsers = await db.query.user.findMany({
+      where: and(eq(user.active, true), eq(user.receiveAvailabilityReminders, true)),
+    });
     const existingCycles = await db.query.availabilityReminderCycles.findMany({
       where: eq(availabilityReminderCycles.cycleMonth, cycleMonth),
     });
@@ -88,7 +90,7 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
   });
 
   for (const cycle of openCycles) {
-    if (!cycle.user.active) continue;
+    if (!cycle.user.active || !cycle.user.receiveAvailabilityReminders) continue;
     if (!cycle.lastSentAt || cycle.remindersSent >= MAX_REMINDERS) continue;
     if (differenceInCalendarDays(today, cycle.lastSentAt) < FOLLOWUP_INTERVAL_DAYS) continue;
 
@@ -131,7 +133,9 @@ export async function sendAvailabilityRemindersNow(logger?: ReminderLogger): Pro
   const today = new Date();
   const windowEnd = addMonths(today, MANUAL_WINDOW_MONTHS);
 
-  const activeUsers = await db.query.user.findMany({ where: eq(user.active, true) });
+  const activeUsers = await db.query.user.findMany({
+    where: and(eq(user.active, true), eq(user.receiveAvailabilityReminders, true)),
+  });
   let remindersSent = 0;
   for (const u of activeUsers) {
     const gaps = await getUnsetAvailabilityDates(u.id, today, windowEnd);

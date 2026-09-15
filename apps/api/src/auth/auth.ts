@@ -54,6 +54,14 @@ export const auth = betterAuth({
         defaultValue: true,
         input: false,
       },
+      // Self-service opt-out from the automated availability-reminder emails (both the
+      // monthly cron cycle and the admin's ad-hoc "send now") — see
+      // jobs/sendAvailabilityReminders.ts. Defaults true so existing users keep getting
+      // reminded unless they explicitly turn it off.
+      receiveAvailabilityReminders: {
+        type: 'boolean',
+        defaultValue: true,
+      },
     },
   },
   // Requires an admin to approve any brand-new account created via Google sign-in

@@ -37,6 +37,7 @@ export async function getUnsetAvailabilityDates(userId: string, from: Date, to: 
   const gaps: AvailabilityGap[] = [];
   for (const occurrence of occurrences) {
     if (occurrence.status === 'canceled') continue;
+    if (!occurrence.event.active) continue;
     if (!occurrence.roles.some((r) => teamIds.has(r.teamId))) continue;
 
     const dateOnly = toUtcDateOnly(occurrence.startAt);

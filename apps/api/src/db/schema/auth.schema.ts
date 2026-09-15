@@ -19,6 +19,7 @@ export const user = sqliteTable('user', {
     .default('volunteer'),
   phone: text('phone'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  receiveAvailabilityReminders: integer('receive_availability_reminders', { mode: 'boolean' }).notNull().default(true),
 });
 
 export const session = sqliteTable('session', {
