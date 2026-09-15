@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { signOut, useSession } from '../auth/client.js';
 
@@ -7,13 +7,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const adminMenuRef = useRef<HTMLDivElement>(null);
   const role = (data?.user as { role?: string } | undefined)?.role;
   const isAdmin = role === 'admin';
+  const isAdminRoute = location.pathname.startsWith('/admin');
 
-  // Collapse the mobile menu automatically whenever the route changes.
+  // Collapse the mobile menu and the admin dropdown automatically whenever the route changes.
   useEffect(() => {
     setMenuOpen(false);
+    setAdminMenuOpen(false);
   }, [location.pathname]);
+
+  // Close the admin dropdown on an outside click (desktop only — on mobile it's an
+  // always-expanded subsection, not a toggleable dropdown, so this is a no-op there).
+  useEffect(() => {
+    if (!adminMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) {
+        setAdminMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [adminMenuOpen]);
 
   async function handleSignOut() {
     await signOut();
@@ -42,15 +59,32 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <NavItem to="/availability">Availability</NavItem>
           <NavItem to="/teams">Teams</NavItem>
           {isAdmin && (
-            <>
-              <span className="nav-sep" style={styles.navSep} />
-              <NavItem to="/admin/events">Events</NavItem>
-              <NavItem to="/admin/schedule">Batch Schedule</NavItem>
-              <NavItem to="/admin/reminders">Reminders</NavItem>
-              <NavItem to="/admin/teams">Manage Teams</NavItem>
-              <NavItem to="/admin/users">Users</NavItem>
-              <NavItem to="/admin/reports">Reports</NavItem>
-            </>
+            <div className="admin-menu" ref={adminMenuRef} style={styles.adminMenu}>
+              <button
+                type="button"
+                className="admin-menu-toggle"
+                onClick={() => setAdminMenuOpen((open) => !open)}
+                aria-expanded={adminMenuOpen}
+                style={{
+                  ...styles.navLink,
+                  ...(isAdminRoute ? styles.navLinkActive : {}),
+                  ...styles.adminMenuToggle,
+                }}
+              >
+                Admin <span aria-hidden style={styles.adminMenuCaret}>{adminMenuOpen ? '▲' : '▼'}</span>
+              </button>
+              <div className="admin-menu-heading" style={styles.adminMenuHeading}>
+                Admin
+              </div>
+              <div className={`admin-dropdown${adminMenuOpen ? ' open' : ''}`} style={styles.adminDropdown}>
+                <NavItem to="/admin/events">Events</NavItem>
+                <NavItem to="/admin/schedule">Batch Schedule</NavItem>
+                <NavItem to="/admin/reminders">Reminders</NavItem>
+                <NavItem to="/admin/teams">Manage Teams</NavItem>
+                <NavItem to="/admin/users">Users</NavItem>
+                <NavItem to="/admin/reports">Reports</NavItem>
+              </div>
+            </div>
           )}
         </nav>
         <div style={styles.userArea}>
@@ -105,7 +139,29 @@ const styles: Record<string, React.CSSProperties> = {
   },
   logo: { height: 40, width: 40, objectFit: 'contain' },
   nav: { display: 'flex', gap: '0.3rem', flex: 1, flexWrap: 'wrap', alignItems: 'center' },
-  navSep: { width: 1, height: 20, background: 'var(--color-border)', margin: '0 0.4rem' },
+  adminMenu: { position: 'relative' },
+  adminMenuToggle: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+  },
+  adminMenuCaret: { fontSize: '0.6rem' },
+  adminMenuHeading: {
+    display: 'none',
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    color: 'var(--color-text-faint)',
+    padding: '0.5rem 0.7rem 0.2rem',
+  },
+  adminDropdown: {
+    display: 'none',
+    flexDirection: 'column',
+    gap: '0.15rem',
+  },
   navLink: {
     color: 'var(--color-text-muted)',
     textDecoration: 'none',
