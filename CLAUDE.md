@@ -88,8 +88,15 @@ frontend hook together.
   the DB each call, so it already sees assignments made earlier in the same run.
 - `db/schema/auth.schema.ts` — hand-written to match what `@better-auth/cli generate` would produce
   (user/session/account/verification), extended with better-auth's `additionalFields` (`role`,
-  `phone`, `active` on `user`). These additionalFields **are** returned directly on
-  `session.user` by better-auth — no extra query needed to read a caller's role.
+  `phone`, `active`, `receiveAvailabilityReminders` on `user`). These additionalFields **are**
+  returned directly on `session.user` by better-auth — no extra query needed to read a caller's
+  role. `receiveAvailabilityReminders` (default `true`) is the volunteer's own opt-out from the
+  automated availability-reminder emails — self-toggleable via `PATCH /api/me/preferences`
+  (`modules/users/routes.ts`, `requireAuth`-gated, updates only the caller's own row) and also
+  admin-editable via the existing `PATCH /api/admin/users/:id`. Both `runAvailabilityReminderCycle`
+  and `sendAvailabilityRemindersNow` (`jobs/sendAvailabilityReminders.ts`) filter it out at every
+  send point, including mid-cycle followups, so opting out stops reminders immediately rather than
+  just skipping the next kickoff.
 - `db/schema/core.schema.ts` — the domain model (see below) plus Drizzle `relations()` used by
   relational queries (`db.query.X.findMany({ with: {...} })`) throughout the service layer.
 - `auth/plugin.ts` — better-auth speaks the Fetch API (`Request`/`Response`); Fastify doesn't, so
@@ -138,7 +145,9 @@ frontend hook together.
   teams/occurrences/availability) — `getUnsetAvailabilityDates()` finds occurrences a user's teams
   are involved in where they have **no** availability row at all, which is a different predicate
   than `availability/service.ts`'s `isUserAvailableOn()` (that checks for an explicit `available`
-  row; an explicit `unavailable` row must NOT count as a gap needing a reminder).
+  row; an explicit `unavailable` row must NOT count as a gap needing a reminder). It also skips any
+  occurrence whose `event.active` is `false` — an archived/inactive event's occurrences must never
+  generate a reminder, even if the volunteer's team is still otherwise involved in it.
 - `lib/mailer.ts` — outbound email via Gmail/Google Workspace SMTP (nodemailer + an app password),
   same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
   `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace

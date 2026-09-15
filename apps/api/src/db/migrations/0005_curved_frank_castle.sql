@@ -1,0 +1,1 @@
+ALTER TABLE `user` ADD `receive_availability_reminders` integer DEFAULT true NOT NULL;

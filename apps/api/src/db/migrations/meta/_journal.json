@@ -36,6 +36,13 @@
       "when": 1789001408560,
       "tag": "0004_lyrical_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789485478256,
+      "tag": "0005_curved_frank_castle",
+      "breakpoints": true
     }
   ]
 }

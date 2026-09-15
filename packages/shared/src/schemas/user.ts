@@ -8,6 +8,7 @@ export const userSummarySchema = z.object({
   role: userRoleEnum,
   active: z.boolean(),
   phone: z.string().nullable().optional(),
+  receiveAvailabilityReminders: z.boolean(),
 });
 export type UserSummary = z.infer<typeof userSummarySchema>;
 
@@ -25,5 +26,11 @@ export const updateUserSchema = z.object({
   role: userRoleEnum.optional(),
   active: z.boolean().optional(),
   phone: z.string().nullable().optional(),
+  receiveAvailabilityReminders: z.boolean().optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+export const updateMyPreferencesSchema = z.object({
+  receiveAvailabilityReminders: z.boolean(),
+});
+export type UpdateMyPreferencesInput = z.infer<typeof updateMyPreferencesSchema>;

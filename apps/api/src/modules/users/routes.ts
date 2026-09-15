@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { createUserSchema, updateUserSchema, userSummarySchema, idSchema } from '@lhcc/shared';
+import { createUserSchema, updateUserSchema, updateMyPreferencesSchema, userSummarySchema, idSchema } from '@lhcc/shared';
 import { requireAdmin, requireAuth } from '../../auth/plugin.js';
 import * as usersService from './service.js';
 
@@ -11,6 +11,7 @@ function toSummary(u: {
   role: string;
   active: boolean;
   phone: string | null;
+  receiveAvailabilityReminders: boolean;
 }) {
   return {
     id: u.id,
@@ -19,6 +20,7 @@ function toSummary(u: {
     role: u.role as 'admin' | 'volunteer',
     active: u.active,
     phone: u.phone,
+    receiveAvailabilityReminders: u.receiveAvailabilityReminders,
   };
 }
 
@@ -28,6 +30,16 @@ export const usersRoutes: FastifyPluginAsyncZod = async (app) => {
     const full = await usersService.getUser(session.user.id);
     return toSummary(full);
   });
+
+  app.patch(
+    '/api/me/preferences',
+    { schema: { body: updateMyPreferencesSchema, response: { 200: userSummarySchema } } },
+    async (request) => {
+      const session = await requireAuth(request);
+      const updated = await usersService.updateUser(session.user.id, request.body);
+      return toSummary(updated);
+    },
+  );
 
   app.get(
     '/api/admin/users',

@@ -95,6 +95,7 @@ export default function AdminUsers() {
               <th style={{ padding: '0.7rem 0.9rem' }}>Email</th>
               <th style={{ padding: '0.7rem 0.9rem' }}>Role</th>
               <th style={{ padding: '0.7rem 0.9rem' }}>Active</th>
+              <th style={{ padding: '0.7rem 0.9rem' }}>Reminder emails</th>
               <th />
             </tr>
           </thead>
@@ -121,6 +122,15 @@ export default function AdminUsers() {
                     />
                     {!u.active && <span className="badge badge-warning">Pending approval</span>}
                   </label>
+                </td>
+                <td style={{ padding: '0.6rem 0.9rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={u.receiveAvailabilityReminders}
+                    onChange={(e) =>
+                      updateUser.mutate({ id: u.id, input: { receiveAvailabilityReminders: e.target.checked } })
+                    }
+                  />
                 </td>
                 <td style={{ padding: '0.6rem 0.9rem' }}>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>

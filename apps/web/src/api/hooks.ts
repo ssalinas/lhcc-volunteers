@@ -24,6 +24,7 @@ import type {
   TeamSummaryEntry,
   TeamWithMemberCount,
   UpdateEventInput,
+  UpdateMyPreferencesInput,
   UpdateOccurrenceInput,
   UpdateTeamInput,
   UpdateUserInput,
@@ -117,6 +118,20 @@ export function useClearAvailabilityForDate(userId?: string) {
   return useMutation({
     mutationFn: (date: string) => api.delete(`${availabilityBasePath(userId)}/dates/${date}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
+  });
+}
+
+// ---------- My profile ----------
+
+export function useMyProfile() {
+  return useQuery({ queryKey: ['me'], queryFn: () => api.get<UserSummary>('/api/me') });
+}
+
+export function useUpdateMyPreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateMyPreferencesInput) => api.patch<UserSummary>('/api/me/preferences', input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
   });
 }
 
