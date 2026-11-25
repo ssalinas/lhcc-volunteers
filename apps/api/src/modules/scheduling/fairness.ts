@@ -3,7 +3,7 @@ import { subWeeks } from 'date-fns';
 import { db } from '../../db/client.js';
 import { assignments, volunteerRoles, eventOccurrences, teamMemberships, teams } from '../../db/schema/core.schema.js';
 import { user } from '../../db/schema/auth.schema.js';
-import { toUtcDateOnly } from '../../lib/dates.js';
+import { toAppDateKey } from '../../lib/dates.js';
 import { isUserAvailableOn } from '../availability/service.js';
 import { env } from '../../config/env.js';
 
@@ -103,7 +103,7 @@ export async function getFairnessRankedCandidates(
     );
   }
 
-  const dateOnly = toUtcDateOnly(occurrenceDate);
+  const dateOnly = toAppDateKey(occurrenceDate);
   const candidates: FairnessCandidate[] = await Promise.all(
     activeMembers.map(async (m) => ({
       userId: m.userId,

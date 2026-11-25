@@ -1,8 +1,10 @@
-import { format } from 'date-fns';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { newId } from '../../lib/ids.js';
 import { sendMail } from '../../lib/mailer.js';
+import { formatInAppTimezone } from '../../lib/dates.js';
+import { createResponseToken } from '../../lib/responseTokens.js';
+import { appUrl, emailButton, emailColors, emailLayout, escapeHtml } from '../../lib/emailLayout.js';
 import * as occurrencesService from '../occurrences/service.js';
 import * as teamsService from '../teams/service.js';
 import {
@@ -17,7 +19,7 @@ interface OccurrenceRoster {
   eventName: string;
   startAt: Date;
   location: string | null;
-  roles: { teamName: string; roleName: string; assigneeNames: string[] }[];
+  roles: { teamName: string; roleName: string; assigneeNames: string[]; assigneeUserIds: string[] }[];
 }
 
 interface Recipient {
@@ -27,36 +29,80 @@ interface Recipient {
   occurrences: OccurrenceRoster[];
 }
 
-function renderScheduleEmail(recipient: Recipient) {
+/**
+ * Full roster for each date, a "You're serving" callout up top for anyone assigned, and a
+ * personal login-free link (lib/responseTokens.ts) to see their own schedule and answer for
+ * upcoming dates — most volunteers never sign in, so the email itself has to be enough.
+ */
+async function renderScheduleEmail(recipient: Recipient) {
   const sorted = [...recipient.occurrences].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
   const subject =
     sorted.length === 1 ? `Upcoming schedule: ${sorted[0].eventName}` : `Upcoming schedule (${sorted.length} dates)`;
+  const firstName = recipient.name.split(' ')[0] || recipient.name;
+  const when = (d: Date) => formatInAppTimezone(d, 'EEEE, MMMM d · h:mm a');
 
-  const textBlocks = sorted.map((o) => {
-    const roleLines = o.roles
-      .map(
-        (r) =>
-          `  ${r.roleName} (${r.teamName}): ${r.assigneeNames.length ? r.assigneeNames.join(', ') : 'unfilled'}`,
-      )
-      .join('\n');
-    return `${o.eventName} — ${format(o.startAt, 'EEE, MMM d, p')}${o.location ? ` @ ${o.location}` : ''}\n${roleLines}`;
-  });
-  const text = `Hi ${recipient.name},\n\nHere's the upcoming schedule:\n\n${textBlocks.join('\n\n')}\n`;
+  const token = await createResponseToken(recipient.userId);
+  const myLink = appUrl(`/respond?t=${token}`);
+  const loginLink = appUrl(`/login?email=${encodeURIComponent(recipient.email)}`);
 
-  const htmlBlocks = sorted.map((o) => {
-    const roleItems = o.roles
-      .map(
-        (r) =>
-          `<li><strong>${r.roleName}</strong> (${r.teamName}): ${
-            r.assigneeNames.length ? r.assigneeNames.join(', ') : 'unfilled'
-          }</li>`,
-      )
-      .join('');
-    return `<p><strong>${o.eventName}</strong> — ${format(o.startAt, 'EEE, MMM d, p')}${
-      o.location ? ` @ ${o.location}` : ''
-    }</p><ul>${roleItems}</ul>`;
-  });
-  const html = `<p>Hi ${recipient.name},</p><p>Here's the upcoming schedule:</p>${htmlBlocks.join('')}`;
+  const mine = sorted.flatMap((o) =>
+    o.roles.filter((r) => r.assigneeUserIds.includes(recipient.userId)).map((r) => ({ o, roleName: r.roleName })),
+  );
+
+  const servingHtml = mine.length
+    ? `<div style="margin:0 0 20px;padding:14px 16px;background:#e3f5ec;border-radius:8px"><div style="font-weight:bold;color:${emailColors.success};margin-bottom:6px">You're scheduled to serve:</div>${mine
+        .map(
+          ({ o, roleName }) =>
+            `<div style="margin:4px 0"><strong>${escapeHtml(roleName)}</strong> — ${escapeHtml(o.eventName)}, ${escapeHtml(when(o.startAt))}</div>`,
+        )
+        .join('')}<div style="font-size:15px;margin-top:8px">Can't make it? Please reply to this email or call the church office so we can find someone else.</div></div>`
+    : '';
+
+  const rosterHtml = sorted
+    .map((o) => {
+      const rows = o.roles
+        .map(
+          (r) =>
+            `<tr><td style="padding:4px 12px 4px 0;vertical-align:top;white-space:nowrap"><strong>${escapeHtml(r.roleName)}</strong></td><td style="padding:4px 0;vertical-align:top">${
+              r.assigneeNames.length
+                ? escapeHtml(r.assigneeNames.join(', '))
+                : `<span style="color:${emailColors.muted}">not filled yet</span>`
+            }</td></tr>`,
+        )
+        .join('');
+      return `<div style="padding:14px 0;border-top:1px solid ${emailColors.border}"><div style="font-weight:bold;font-size:18px">${escapeHtml(o.eventName)}</div><div style="color:${emailColors.muted};font-size:15px;margin-bottom:6px">${escapeHtml(when(o.startAt))}${o.location ? ` · ${escapeHtml(o.location)}` : ''}</div><table role="presentation" cellpadding="0" cellspacing="0" style="font-size:16px">${rows}</table></div>`;
+    })
+    .join('');
+
+  const html = emailLayout(
+    `<p style="margin:0 0 12px">Hi ${escapeHtml(firstName)},</p>` +
+      servingHtml +
+      `<p style="margin:0 0 4px">Here's who's serving:</p>` +
+      rosterHtml +
+      `<div style="margin:18px 0 6px;padding-top:14px;border-top:1px solid ${emailColors.border}">${emailButton(myLink, 'See my schedule & availability', 'primary')}</div>` +
+      `<p style="margin:6px 0 0;font-size:14px;color:${emailColors.muted}">That button is just for you — no password needed — and works for 30 days. For the full app, <a href="${escapeHtml(loginLink)}" style="color:${emailColors.primary}">sign in here</a>.</p>`,
+  );
+
+  const text = [
+    `Hi ${firstName},`,
+    '',
+    ...(mine.length
+      ? [
+          "You're scheduled to serve:",
+          ...mine.map(({ o, roleName }) => `  ${roleName} — ${o.eventName}, ${when(o.startAt)}`),
+          "Can't make it? Please reply to this email or call the church office.",
+          '',
+        ]
+      : []),
+    "Here's who's serving:",
+    '',
+    ...sorted.flatMap((o) => [
+      `${o.eventName} — ${when(o.startAt)}${o.location ? ` @ ${o.location}` : ''}`,
+      ...o.roles.map((r) => `  ${r.roleName} (${r.teamName}): ${r.assigneeNames.length ? r.assigneeNames.join(', ') : 'not filled yet'}`),
+      '',
+    ]),
+    `See your schedule and update your availability (no password needed): ${myLink}`,
+  ].join('\n');
 
   return { subject, text, html };
 }
@@ -83,6 +129,7 @@ export async function sendScheduleNotifications(occurrenceIds: string[], sentByU
         teamName: r.team.name,
         roleName: r.name,
         assigneeNames: r.assignments.filter((a) => a.status !== 'declined').map((a) => a.user.name),
+        assigneeUserIds: r.assignments.filter((a) => a.status !== 'declined').map((a) => a.userId),
       })),
     };
 
@@ -118,7 +165,7 @@ export async function sendScheduleNotifications(occurrenceIds: string[], sentByU
   }
 
   for (const recipient of recipients.values()) {
-    await sendMail({ to: recipient.email, ...renderScheduleEmail(recipient) });
+    await sendMail({ to: recipient.email, ...(await renderScheduleEmail(recipient)) });
     await db.insert(scheduleNotificationRecipients).values({
       id: newId(),
       batchId,

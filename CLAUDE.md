@@ -78,7 +78,8 @@ frontend hook together.
   concern" — `POST /api/schedule/notify` emails every active member of every team involved in a
   batch of occurrences (not just who's assigned) the full named roster, via `lib/mailer.ts`, and
   logs the send in `schedule_notification_batches` + `..._batch_occurrences` + `..._recipients`
-  for audit/dedup purposes; `GET /api/admin/schedule-notifications/last-sent` aggregates that log
+  for audit/dedup purposes — each recipient's copy also has a "You're scheduled to serve" callout
+  if they're assigned, and a personal login-free `/respond` link (see `modules/respond` below); `GET /api/admin/schedule-notifications/last-sent` aggregates that log
   by event (`getLastNotifiedByEvent`, `MAX(createdAt)` grouped through the batch-occurrences join)
   for the same kind of admin visibility. There's deliberately no separate "batch" auto-schedule
   endpoint — the frontend instead loops the existing `POST /api/occurrences/:id/auto-schedule`
@@ -171,8 +172,8 @@ frontend hook together.
   nothing else, and resolves to nothing for an inactive user. The email buttons carry the answer
   as `?d=<dates>&s=<status>`, but `/respond` shows a one-tap confirm instead of saving on page
   load — email security scanners open every link, so saving on GET would answer for people.
-  Dates are keyed by UTC calendar date (`toUtcDateOnly`), the same key the reminder gap logic
-  uses, so answering via a link always clears that date's gap. Exists because volunteers were
+  `GET /api/respond/:token` also returns the person's upcoming assignments, so the link in
+  schedule-notification emails doubles as a no-login "my schedule" page. Exists because volunteers were
   replying to the email instead of clicking through to a page that required a login.
   `GET /api/admin/availability-grid` (`getAvailabilityGrid` in `scheduling/availabilityGaps.ts`)
   powers `/admin/availability` ("Who's Answered?"), a users × dates grid where one click per cell
@@ -264,6 +265,17 @@ from an explicit `status: 'unavailable'`.
   `recharts` (both v2 and v3) renders invisible/broken bars in this environment; don't reintroduce it.
 
 ## Gotchas
+
+- **Timezone: availability is keyed by Eastern calendar date.** Every user is in Eastern time,
+  and "which date is this occurrence on?" must agree between server and browser, so anything that
+  turns an occurrence's `startAt` into an `availability` date key uses `toAppDateKey()` from
+  `packages/shared/src/dates.ts` (`APP_TIMEZONE = 'America/New_York'`) — server (reminder gaps,
+  fairness's available check, email links) and web (Availability page, Calendar grouping) alike.
+  Server-rendered times (emails) use `formatInAppTimezone()` from `lib/dates.ts`, because plain
+  date-fns `format` uses the server's own clock (the Pi may be UTC → a 10am service prints as
+  3:00 PM). `toUtcDateOnly` remains only for rrule expansion in `generateOccurrences.ts`, whose
+  dates really are UTC midnights. Browser-side display still uses the browser's clock, which is
+  fine as long as users are in Eastern time.
 
 - `import rrulePkg from 'rrule'; const { rrulestr } = rrulePkg;` — a named import
   (`import { rrulestr } from 'rrule'`) throws under Node's ESM loader for this package.

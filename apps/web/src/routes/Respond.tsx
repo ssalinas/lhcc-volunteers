@@ -115,10 +115,31 @@ export default function Respond() {
             )}
 
             {!(pendingStatus && pendingDates.length > 0 && !justConfirmed) && !justConfirmed && (
-              <h1 style={{ fontSize: '1.5rem' }}>Hi {data.firstName} — can you serve?</h1>
+              <h1 style={{ fontSize: '1.5rem' }}>Hi {data.firstName}!</h1>
             )}
 
-            <p style={styles.bigText}>Tap your answer for each date. It saves right away.</p>
+            {data.assignments.length > 0 && (
+              <div className="card" style={{ ...styles.bigCard, background: 'var(--color-success-light)', boxShadow: 'none' }}>
+                <h2 style={{ marginTop: 0, fontSize: '1.25rem', color: 'var(--color-success)' }}>You’re scheduled to serve</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {data.assignments.map((a) => (
+                    <div key={`${a.occurrenceId}-${a.roleName}`} style={styles.bigText}>
+                      <strong>{a.roleName}</strong> — {a.eventName}
+                      <div style={{ color: 'var(--color-text-muted)', fontSize: '1rem' }}>
+                        {format(new Date(a.startAt), 'EEEE, MMMM d · h:mm a')}
+                        {a.location ? ` · ${a.location}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ margin: '0.9rem 0 0', fontSize: '0.95rem' }}>
+                  Can’t make one of these? Please call the church office or reply to the email so we can find someone else.
+                </p>
+              </div>
+            )}
+
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>When can you serve?</h2>
+            <p style={{ ...styles.bigText, marginTop: 0 }}>Tap your answer for each date. It saves right away.</p>
 
             {data.dates.length === 0 && <p style={styles.bigText}>There are no upcoming dates that need an answer from you.</p>}
 

@@ -10,9 +10,20 @@ export const respondDateSchema = z.object({
 });
 export type RespondDate = z.infer<typeof respondDateSchema>;
 
+export const respondAssignmentSchema = z.object({
+  occurrenceId: idSchema,
+  eventName: z.string(),
+  roleName: z.string(),
+  startAt: z.string().datetime(),
+  location: z.string().nullable(),
+});
+export type RespondAssignment = z.infer<typeof respondAssignmentSchema>;
+
 export const respondPageSchema = z.object({
   firstName: z.string(),
   email: z.string(),
+  /** Upcoming, non-declined assignments — so the email link doubles as "my schedule" without signing in. */
+  assignments: z.array(respondAssignmentSchema),
   dates: z.array(respondDateSchema),
 });
 export type RespondPage = z.infer<typeof respondPageSchema>;

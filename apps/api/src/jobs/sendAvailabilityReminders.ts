@@ -8,7 +8,7 @@ import { sendMail } from '../lib/mailer.js';
 import { newId } from '../lib/ids.js';
 import { createResponseToken, pruneExpiredResponseTokens, RESPONSE_TOKEN_TTL_DAYS } from '../lib/responseTokens.js';
 import { appUrl, emailButton, emailColors, emailLayout, escapeHtml } from '../lib/emailLayout.js';
-import { toUtcDateOnly } from '../lib/dates.js';
+import { toAppDateKey } from '../lib/dates.js';
 
 const WINDOW_MONTHS = 2;
 const MANUAL_WINDOW_MONTHS = 1;
@@ -45,7 +45,7 @@ async function renderReminderEmail(u: { id: string; name: string }, gaps: Availa
 
   const byDate = new Map<string, string[]>();
   for (const g of gaps) {
-    const date = toUtcDateOnly(g.startAt);
+    const date = toAppDateKey(g.startAt);
     const names = byDate.get(date) ?? [];
     if (!names.includes(g.eventName)) names.push(g.eventName);
     byDate.set(date, names);
@@ -103,12 +103,15 @@ async function renderReminderEmail(u: { id: string; name: string }, gaps: Availa
 export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Promise<ReminderCycleResult> {
   const today = new Date();
   const windowEnd = addMonths(today, WINDOW_MONTHS);
-  const cycleMonth = format(today, 'yyyy-MM');
+  // Eastern calendar date, not the server clock's, so the month boundary / day-25 kickoff match the church's calendar.
+  const todayKey = toAppDateKey(today);
+  const cycleMonth = todayKey.slice(0, 7);
+  const dayOfMonth = Number(todayKey.slice(8, 10));
 
   const result: ReminderCycleResult = { kickoffsSent: 0, followupsSent: 0, resolved: 0, exhausted: 0 };
   await pruneExpiredResponseTokens();
 
-  if (today.getDate() >= KICKOFF_DAY_OF_MONTH) {
+  if (dayOfMonth >= KICKOFF_DAY_OF_MONTH) {
     const activeUsers = await db.query.user.findMany({
       where: and(eq(user.active, true), eq(user.receiveAvailabilityReminders, true)),
     });

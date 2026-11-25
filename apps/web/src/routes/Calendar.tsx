@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { toAppDateKey } from '@lhcc/shared';
 import {
   addMonths,
   eachDayOfInterval,
@@ -32,7 +33,7 @@ export default function Calendar() {
   const byDay = useMemo(() => {
     const map = new Map<string, typeof occurrences>();
     for (const o of occurrences ?? []) {
-      const key = format(new Date(o.startAt), 'yyyy-MM-dd');
+      const key = toAppDateKey(o.startAt);
       const list = map.get(key) ?? [];
       list.push(o);
       map.set(key, list as typeof occurrences);

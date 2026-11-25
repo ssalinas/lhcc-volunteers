@@ -2,7 +2,7 @@ import { and, eq, gte, lt } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { eventOccurrences, teams, teamMemberships, availability } from '../../db/schema/core.schema.js';
 import { user } from '../../db/schema/auth.schema.js';
-import { toUtcDateOnly } from '../../lib/dates.js';
+import { toAppDateKey } from '../../lib/dates.js';
 
 export interface AvailabilityGap {
   occurrenceId: string;
@@ -19,7 +19,7 @@ async function loadOccurrencesInRange(from: Date, to: Date) {
 }
 
 export interface RelevantAvailabilityDate {
-  /** UTC calendar date (YYYY-MM-DD) — the same key reminders and fairness use. */
+  /** Eastern calendar date (YYYY-MM-DD, toAppDateKey) — the same key reminders and fairness use. */
   date: string;
   eventNames: string[];
   status: 'available' | 'unavailable' | null;
@@ -44,7 +44,7 @@ async function loadRelevantOccurrences(userId: string, from: Date, to: Date) {
   return occurrences
     .filter((o) => o.status !== 'canceled' && o.event.active && o.roles.some((r) => teamIds.has(r.teamId)))
     .map((occurrence) => {
-      const date = toUtcDateOnly(occurrence.startAt);
+      const date = toAppDateKey(occurrence.startAt);
       const covering = myAvailability.filter((a) => a.startDate <= date && date <= a.endDate);
       const status = covering.find((a) => a.status === 'unavailable')?.status ?? covering[0]?.status ?? null;
       return { occurrence, date, status };
@@ -92,7 +92,7 @@ export async function getAvailabilityGrid(from: Date, to: Date) {
   const live = occurrences.filter((o) => o.status !== 'canceled' && o.event.active);
   const dateEntries = new Map<string, { date: string; eventNames: string[]; teamIds: Set<string> }>();
   for (const o of live) {
-    const date = toUtcDateOnly(o.startAt);
+    const date = toAppDateKey(o.startAt);
     const entry = dateEntries.get(date) ?? { date, eventNames: [], teamIds: new Set<string>() };
     if (!entry.eventNames.includes(o.event.name)) entry.eventNames.push(o.event.name);
     for (const r of o.roles) entry.teamIds.add(r.teamId);

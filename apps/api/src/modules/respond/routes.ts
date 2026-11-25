@@ -6,6 +6,7 @@ import { resolveResponseToken } from '../../lib/responseTokens.js';
 import { NotFoundError } from '../../lib/http-errors.js';
 import { getRelevantAvailabilityDates } from '../scheduling/availabilityGaps.js';
 import * as availabilityService from '../availability/service.js';
+import * as assignmentsService from '../assignments/service.js';
 
 /** Matches AvailabilityDateList's HORIZON_DAYS, so the email-link page shows as far ahead as the app does. */
 const RESPOND_HORIZON_DAYS = 120;
@@ -30,8 +31,21 @@ export const respondRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get('/api/respond/:token', { schema: { params: tokenParam } }, async (request) => {
     const u = await userForToken(request.params.token);
     const now = new Date();
-    const dates = await getRelevantAvailabilityDates(u.id, now, addDays(now, RESPOND_HORIZON_DAYS));
-    return { firstName: u.name.split(' ')[0] || u.name, email: u.email, dates };
+    const [dates, mine] = await Promise.all([
+      getRelevantAvailabilityDates(u.id, now, addDays(now, RESPOND_HORIZON_DAYS)),
+      assignmentsService.listMine(u.id),
+    ]);
+    const assignments = mine
+      .filter((a) => a.volunteerRole.occurrence.startAt > now && a.volunteerRole.occurrence.status !== 'canceled')
+      .sort((a, b) => a.volunteerRole.occurrence.startAt.getTime() - b.volunteerRole.occurrence.startAt.getTime())
+      .map((a) => ({
+        occurrenceId: a.volunteerRole.occurrence.id,
+        eventName: a.volunteerRole.occurrence.event.name,
+        roleName: a.volunteerRole.name,
+        startAt: a.volunteerRole.occurrence.startAt.toISOString(),
+        location: a.volunteerRole.occurrence.locationOverride ?? a.volunteerRole.occurrence.event.location,
+      }));
+    return { firstName: u.name.split(' ')[0] || u.name, email: u.email, assignments, dates };
   });
 
   app.put(
