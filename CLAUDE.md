@@ -160,7 +160,14 @@ frontend hook together.
 (concrete dated instances, materialized ahead by `OCCURRENCE_HORIZON_WEEKS`, one row per date,
 unique on `(eventId, startAt)`) → `volunteer_roles` (the actual per-occurrence opportunity,
 optionally `stackable`) → `assignments` (user ↔ role, `status` scheduled/confirmed/declined/completed).
-One-off events skip the template step and write their occurrence + roles directly.
+One-off events write their single occurrence + roles directly at creation (no generator run),
+but still store `event_role_templates` (linked via `sourceTemplateId`) so the Edit Event page can
+list/edit "Roles needed" the same way for both kinds; one-off events created before that change
+have no templates. Adding/removing a template via `/api/events/:id/role-templates`
+(`events/service.ts::addRoleTemplate`/`deleteRoleTemplate`) also adds/removes the matching role on
+every already-materialized **future** occurrence — removal skips any role that already has an
+assignment — so a template change shows up on upcoming dates immediately instead of only on
+dates generated past the horizon.
 
 `teams` / `team_memberships` are separate from all of the above. One team is special:
 `teams.isSystemTeam` marks the auto-provisioned "All Volunteers" team, which has **no real
@@ -210,6 +217,16 @@ from an explicit `status: 'unavailable'`.
   `AppLayout.tsx`'s nav can't collapse via inline styles alone (no media queries there), so it
   hides `.app-nav` and shows a `.nav-toggle` hamburger button behind that breakpoint, toggled by
   local `menuOpen` state that also resets on every route change.
+- Admin edits save the moment you pick something wherever possible, with feedback via
+  `components/Toast.tsx` (`useToast()`, a "Saved"/"X assigned — Undo" toast) — e.g. picking a
+  name in the occurrence page's assign dropdown or the Teams page's add-member dropdown saves
+  immediately, no separate Assign/Add button. This is deliberate: non-technical admins kept
+  picking someone and navigating away without clicking the button. Where a page genuinely needs
+  an explicit Save (`EventEditor.tsx`), *everything* on it (details, new roles, removed roles)
+  stays pending until that one Save, behind an "unsaved changes" bar and
+  `components/useUnsavedChangesWarning.ts` (beforeunload + capture-phase link-click confirm,
+  since `<BrowserRouter>` has no `useBlocker`). Don't reintroduce mixed instant/pending saving
+  on one page.
 - `components/StackedBarChart.tsx` is a hand-rolled CSS bar chart, not a charting library —
   `recharts` (both v2 and v3) renders invisible/broken bars in this environment; don't reintroduce it.
 

@@ -8,6 +8,7 @@ import {
   useTeamMembers,
   useTeams,
 } from '../../api/hooks.js';
+import { useToast } from '../../components/Toast.js';
 
 export default function AdminTeams() {
   const { data: teams } = useTeams();
@@ -114,10 +115,41 @@ function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTe
   const { data: users } = useAdminUsers();
   const join = useJoinTeam();
   const leave = useLeaveTeam();
-  const [addUserId, setAddUserId] = useState('');
+  const toast = useToast();
 
   const memberIds = new Set((members ?? []).map((m) => m.userId));
   const addableUsers = (users ?? []).filter((u) => !memberIds.has(u.id));
+
+  function nameOf(userId: string) {
+    return users?.find((u) => u.id === userId)?.name ?? 'Volunteer';
+  }
+
+  // Picking a name adds them right away (no separate "Add" button to forget); Undo is the safety net.
+  function handleAdd(userId: string) {
+    join.mutate(
+      { teamId, userId },
+      {
+        onSuccess: () =>
+          toast(`Added ${nameOf(userId)} to the team`, {
+            action: { label: 'Undo', onClick: () => leave.mutate({ teamId, userId }) },
+          }),
+        onError: (err) => toast(err instanceof Error ? err.message : 'Could not add', { variant: 'error' }),
+      },
+    );
+  }
+
+  function handleRemove(userId: string, name: string) {
+    leave.mutate(
+      { teamId, userId },
+      {
+        onSuccess: () =>
+          toast(`Removed ${name} from the team`, {
+            action: { label: 'Undo', onClick: () => join.mutate({ teamId, userId }) },
+          }),
+        onError: (err) => toast(err instanceof Error ? err.message : 'Could not remove', { variant: 'error' }),
+      },
+    );
+  }
 
   return (
     <div>
@@ -134,7 +166,7 @@ function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTe
               {m.user.name} <span style={{ color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>{m.user.email}</span>
             </span>
             {!isSystemTeam && (
-              <button type="button" onClick={() => leave.mutate({ teamId, userId: m.userId })} className="btn-ghost">
+              <button type="button" onClick={() => handleRemove(m.userId, m.user.name)} className="btn-ghost">
                 Remove
               </button>
             )}
@@ -144,27 +176,20 @@ function TeamMembersPanel({ teamId, isSystemTeam }: { teamId: string; isSystemTe
       </div>
 
       {!isSystemTeam && (
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <select value={addUserId} onChange={(e) => setAddUserId(e.target.value)} style={{ flex: 1 }}>
-            <option value="">Add a user…</option>
-            {addableUsers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.email})
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!addUserId}
-            onClick={() => {
-              join.mutate({ teamId, userId: addUserId });
-              setAddUserId('');
-            }}
-            className="btn btn-primary btn-sm"
-          >
-            Add
-          </button>
-        </div>
+        <select
+          value=""
+          disabled={join.isPending}
+          onChange={(e) => e.target.value && handleAdd(e.target.value)}
+          style={{ width: '100%' }}
+          aria-label="Add someone to this team"
+        >
+          <option value="">{join.isPending ? 'Saving…' : '+ Add someone to this team (saves right away)'}</option>
+          {addableUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.email})
+            </option>
+          ))}
+        </select>
       )}
     </div>
   );

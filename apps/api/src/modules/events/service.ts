@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gt, inArray } from 'drizzle-orm';
 import type { CreateEventInput, CreateEventRoleTemplateInput, UpdateEventInput } from '@lhcc/shared';
 import { db } from '../../db/client.js';
 import { events, eventRoleTemplates, eventOccurrences, volunteerRoles } from '../../db/schema/core.schema.js';
@@ -82,7 +82,10 @@ export async function createEvent(input: CreateEventInput, createdBy: string) {
     .values({ id: newId(), eventId, startAt, endAt })
     .returning();
 
+  // Templates are stored for one-off events too (even though there's only ever one occurrence)
+  // so the Edit Event page can list and edit "Roles needed" the same way for both kinds.
   for (const role of input.roleTemplates) {
+    const template = await createRoleTemplate(eventId, role);
     await db.insert(volunteerRoles).values({
       id: newId(),
       eventOccurrenceId: occurrence.id,
@@ -90,7 +93,7 @@ export async function createEvent(input: CreateEventInput, createdBy: string) {
       name: role.name,
       slotsCount: role.slotsCount,
       stackable: role.stackable,
-      sourceTemplateId: null,
+      sourceTemplateId: template.id,
     });
   }
 
@@ -127,7 +130,57 @@ export async function createRoleTemplate(eventId: string, input: CreateEventRole
   return created;
 }
 
+/**
+ * Adds a role template AND applies it to every already-materialized future occurrence of the
+ * event. Without the second part, a new role only showed up on dates generated later (past the
+ * OCCURRENCE_HORIZON_WEEKS window), so admins added "Greeter" and saw it on none of the
+ * upcoming Sundays.
+ */
+export async function addRoleTemplate(eventId: string, input: CreateEventRoleTemplateInput) {
+  await getEvent(eventId);
+  const template = await createRoleTemplate(eventId, input);
+  const futureOccurrences = await db.query.eventOccurrences.findMany({
+    where: and(eq(eventOccurrences.eventId, eventId), gt(eventOccurrences.startAt, new Date())),
+  });
+  for (const occurrence of futureOccurrences) {
+    await db.insert(volunteerRoles).values({
+      id: newId(),
+      eventOccurrenceId: occurrence.id,
+      teamId: template.teamId,
+      name: template.name,
+      slotsCount: template.slotsCount,
+      stackable: template.stackable,
+      sourceTemplateId: template.id,
+    });
+  }
+  return { template, occurrencesUpdated: futureOccurrences.length };
+}
+
+/**
+ * Deletes a role template and removes the roles it created on future occurrences — except any
+ * that already have someone assigned, which are left in place (and simply detached from the
+ * template by the FK's ON DELETE SET NULL) rather than silently dropping a volunteer.
+ */
 export async function deleteRoleTemplate(eventId: string, templateId: string) {
+  const futureOccurrenceIds = (
+    await db.query.eventOccurrences.findMany({
+      where: and(eq(eventOccurrences.eventId, eventId), gt(eventOccurrences.startAt, new Date())),
+      columns: { id: true },
+    })
+  ).map((o) => o.id);
+
+  if (futureOccurrenceIds.length > 0) {
+    const roles = await db.query.volunteerRoles.findMany({
+      where: and(
+        eq(volunteerRoles.sourceTemplateId, templateId),
+        inArray(volunteerRoles.eventOccurrenceId, futureOccurrenceIds),
+      ),
+      with: { assignments: { columns: { id: true } } },
+    });
+    const removable = roles.filter((r) => r.assignments.length === 0).map((r) => r.id);
+    if (removable.length > 0) await db.delete(volunteerRoles).where(inArray(volunteerRoles.id, removable));
+  }
+
   await db
     .delete(eventRoleTemplates)
     .where(and(eq(eventRoleTemplates.id, templateId), eq(eventRoleTemplates.eventId, eventId)));

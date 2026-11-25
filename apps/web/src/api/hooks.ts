@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  Assignment,
   AutoScheduleResult,
   AvailabilityEntry,
   AvailabilityReminderStatus,
@@ -23,6 +24,7 @@ import type {
   TeamMember,
   TeamSummaryEntry,
   TeamWithMemberCount,
+  UpdateAssignmentInput,
   UpdateEventInput,
   UpdateMyPreferencesInput,
   UpdateOccurrenceInput,
@@ -216,7 +218,11 @@ export function useAddRoleTemplate() {
   return useMutation({
     mutationFn: ({ eventId, input }: { eventId: string; input: CreateEventRoleTemplateInput }) =>
       api.post(`/api/events/${eventId}/role-templates`, input),
-    onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] }),
+    // Role-template changes now also add/remove roles on upcoming occurrences (events/service.ts).
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] });
+      qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
   });
 }
 
@@ -225,7 +231,11 @@ export function useDeleteRoleTemplate() {
   return useMutation({
     mutationFn: ({ eventId, templateId }: { eventId: string; templateId: string }) =>
       api.delete(`/api/events/${eventId}/role-templates/${templateId}`),
-    onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] }),
+    // Role-template changes now also add/remove roles on upcoming occurrences (events/service.ts).
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] });
+      qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
   });
 }
 
@@ -291,11 +301,23 @@ export function useCreateAssignment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ input, occurrenceId }: { input: CreateAssignmentInput; occurrenceId: string }) =>
-      api.post('/api/assignments', input),
+      api.post<Assignment>('/api/assignments', input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['occurrences', 'detail', vars.occurrenceId] });
       qc.invalidateQueries({ queryKey: ['occurrences', vars.occurrenceId, 'eligible-candidates'] });
       qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
+  });
+}
+
+/** Used by the occurrence page's Undo after removing someone, to put back a non-default status. */
+export function useUpdateAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateAssignmentInput; occurrenceId: string }) =>
+      api.patch<Assignment>(`/api/assignments/${id}`, input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['occurrences', 'detail', vars.occurrenceId] });
     },
   });
 }

@@ -95,9 +95,9 @@ export const eventsRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { params: z.object({ id: idSchema }), body: createEventRoleTemplateSchema } },
     async (request, reply) => {
       await requireAdmin(request);
-      const created = await eventsService.createRoleTemplate(request.params.id, request.body);
+      const { template } = await eventsService.addRoleTemplate(request.params.id, request.body);
       reply.status(201);
-      return toRoleTemplateDto(created);
+      return toRoleTemplateDto(template);
     },
   );
 
