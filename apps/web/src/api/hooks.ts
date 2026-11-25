@@ -3,6 +3,7 @@ import type {
   Assignment,
   AutoScheduleResult,
   AvailabilityEntry,
+  AvailabilityGrid,
   AvailabilityReminderStatus,
   AvailabilityStatus,
   BackupStatus,
@@ -18,6 +19,7 @@ import type {
   EventLastNotified,
   OccurrenceDetail,
   OccurrenceSummary,
+  RespondPage,
   RunAvailabilityRemindersNowResult,
   RunBackupResult,
   ScheduleNotificationResult,
@@ -111,7 +113,10 @@ export function useSetAvailabilityForDate(userId?: string) {
   return useMutation({
     mutationFn: ({ date, status }: { date: string; status: AvailabilityStatus }) =>
       api.put<AvailabilityEntry>(`${availabilityBasePath(userId)}/dates/${date}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] });
+      qc.invalidateQueries({ queryKey: ['availability-grid'] });
+    },
   });
 }
 
@@ -119,7 +124,49 @@ export function useClearAvailabilityForDate(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (date: string) => api.delete(`${availabilityBasePath(userId)}/dates/${date}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] });
+      qc.invalidateQueries({ queryKey: ['availability-grid'] });
+    },
+  });
+}
+
+// ---------- Login-free email-link responses (/respond) ----------
+// Public: the token from the email link is the only credential (see api lib/responseTokens.ts).
+
+export function useRespondPage(token: string | null) {
+  return useQuery({
+    queryKey: ['respond', token],
+    queryFn: () => api.get<RespondPage>(`/api/respond/${token}`),
+    enabled: !!token,
+    retry: false,
+  });
+}
+
+export function useRespondSetDate(token: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ date, status }: { date: string; status: AvailabilityStatus }) =>
+      api.put(`/api/respond/${token}/dates/${date}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['respond', token] }),
+  });
+}
+
+export function useRespondClearDate(token: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => api.delete(`/api/respond/${token}/dates/${date}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['respond', token] }),
+  });
+}
+
+// ---------- Admin: availability grid ----------
+
+export function useAvailabilityGrid(from: string, to: string) {
+  return useQuery({
+    queryKey: ['availability-grid', from, to],
+    queryFn: () =>
+      api.get<AvailabilityGrid>(`/api/admin/availability-grid?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   });
 }
 

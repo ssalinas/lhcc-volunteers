@@ -7,6 +7,10 @@ const envSchema = z.object({
 
   BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET must be at least 16 characters'),
   BETTER_AUTH_URL: z.string().url().default('http://localhost:3000'),
+  // Where links in emails point (the web app's origin). Defaults to BETTER_AUTH_URL, which is the
+  // same origin in production (one Node process serves both); only differs in local dev
+  // (Vite on :5173 vs the API on :3000).
+  APP_URL: z.string().url().optional(),
   TRUSTED_ORIGINS: z
     .string()
     .default('http://localhost:5173')

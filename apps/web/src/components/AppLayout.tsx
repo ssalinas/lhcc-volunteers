@@ -79,6 +79,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <div className={`admin-dropdown${adminMenuOpen ? ' open' : ''}`} style={styles.adminDropdown}>
                 <NavItem to="/admin/events">Events</NavItem>
                 <NavItem to="/admin/schedule">Batch Schedule</NavItem>
+                <NavItem to="/admin/availability">Who's Answered?</NavItem>
                 <NavItem to="/admin/reminders">Reminders</NavItem>
                 <NavItem to="/admin/teams">Manage Teams</NavItem>
                 <NavItem to="/admin/users">Users</NavItem>

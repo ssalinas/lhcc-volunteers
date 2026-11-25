@@ -6,7 +6,9 @@ import { availabilityReminderCycles, availabilityReminderSends } from '../db/sch
 import { getUnsetAvailabilityDates, type AvailabilityGap } from '../modules/scheduling/availabilityGaps.js';
 import { sendMail } from '../lib/mailer.js';
 import { newId } from '../lib/ids.js';
-import { env } from '../config/env.js';
+import { createResponseToken, pruneExpiredResponseTokens, RESPONSE_TOKEN_TTL_DAYS } from '../lib/responseTokens.js';
+import { appUrl, emailButton, emailColors, emailLayout, escapeHtml } from '../lib/emailLayout.js';
+import { toUtcDateOnly } from '../lib/dates.js';
 
 const WINDOW_MONTHS = 2;
 const MANUAL_WINDOW_MONTHS = 1;
@@ -29,18 +31,65 @@ export interface ReminderCycleResult {
   exhausted: number;
 }
 
-function renderReminderEmail(userName: string, gaps: AvailabilityGap[]) {
-  const link = `${env.BETTER_AUTH_URL}/availability`;
-  const dateLines = gaps.map((g) => `${format(g.startAt, 'EEE, MMM d')} — ${g.eventName}`);
-  return {
-    subject: 'Please update your availability',
-    text: `Hi ${userName},\n\nYou have upcoming dates that need your availability set:\n\n${dateLines
-      .map((l) => `- ${l}`)
-      .join('\n')}\n\nUpdate here: ${link}\n`,
-    html: `<p>Hi ${userName},</p><p>You have upcoming dates that need your availability set:</p><ul>${dateLines
-      .map((l) => `<li>${l}</li>`)
-      .join('')}</ul><p><a href="${link}">Update your availability</a></p>`,
-  };
+/**
+ * Each date gets its own "I can serve" / "Can't make it" buttons, plus one "all of these"
+ * button, all carrying a fresh login-free token (lib/responseTokens.ts) — so answering never
+ * requires signing in. Volunteers were replying to the old single-link email instead of clicking
+ * through to a page that needed a login; the reply-doesn't-count note is there for the same reason.
+ * Buttons open a confirm page rather than saving on click, because email security scanners
+ * "visit" every link in a message.
+ */
+async function renderReminderEmail(u: { id: string; name: string }, gaps: AvailabilityGap[]) {
+  const token = await createResponseToken(u.id);
+  const firstName = u.name.split(' ')[0] || u.name;
+
+  const byDate = new Map<string, string[]>();
+  for (const g of gaps) {
+    const date = toUtcDateOnly(g.startAt);
+    const names = byDate.get(date) ?? [];
+    if (!names.includes(g.eventName)) names.push(g.eventName);
+    byDate.set(date, names);
+  }
+  const dates = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const link = (dateParam: string, status: 'available' | 'unavailable') =>
+    appUrl(`/respond?t=${token}&d=${dateParam}&s=${status}`);
+  const label = (date: string) => format(new Date(`${date}T12:00:00Z`), 'EEEE, MMMM d');
+  const allDates = dates.map(([d]) => d).join(',');
+
+  const rows = dates
+    .map(
+      ([date, names]) =>
+        `<tr><td style="padding:14px 0;border-top:1px solid ${emailColors.border}"><div style="font-weight:bold;font-size:18px">${escapeHtml(label(date))}</div><div style="color:${emailColors.muted};font-size:15px;margin-bottom:6px">${escapeHtml(names.join(', '))}</div>${emailButton(link(date, 'available'), '✓ I can serve', 'success')}${emailButton(link(date, 'unavailable'), "✗ Can't make it", 'secondary')}</td></tr>`,
+    )
+    .join('');
+
+  const html = emailLayout(
+    `<p style="margin:0 0 12px">Hi ${escapeHtml(firstName)},</p>` +
+      `<p style="margin:0 0 16px">Can you help on these dates? <strong>Just tap a button for each date</strong> — no password needed.</p>` +
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>` +
+      (dates.length > 1
+        ? `<div style="margin:18px 0 8px;padding-top:14px;border-top:1px solid ${emailColors.border}">${emailButton(link(allDates, 'available'), '✓ I can serve on all of these', 'primary')}</div>`
+        : '') +
+      `<p style="margin:20px 0 0;padding:12px 14px;background:#fdf1d6;border-radius:8px;font-size:15px"><strong>Please use the buttons above.</strong> Replying to this email does not update the schedule.</p>` +
+      `<p style="margin:16px 0 0;font-size:13px;color:${emailColors.muted}">These buttons are just for you and work for ${RESPONSE_TOKEN_TTL_DAYS} days. You can stop these reminders from the Availability page after signing in.</p>`,
+  );
+
+  const text = [
+    `Hi ${firstName},`,
+    '',
+    'Can you help on these dates? Open a link below to answer — no password needed.',
+    '',
+    ...dates.flatMap(([date, names]) => [
+      `${label(date)} (${names.join(', ')})`,
+      `  I can serve: ${link(date, 'available')}`,
+      `  Can't make it: ${link(date, 'unavailable')}`,
+      '',
+    ]),
+    ...(dates.length > 1 ? [`I can serve on all of these: ${link(allDates, 'available')}`, ''] : []),
+    'Please use the links above. Replying to this email does not update the schedule.',
+  ].join('\n');
+
+  return { subject: 'Can you serve? Tap to answer', html, text };
 }
 
 /**
@@ -57,6 +106,7 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
   const cycleMonth = format(today, 'yyyy-MM');
 
   const result: ReminderCycleResult = { kickoffsSent: 0, followupsSent: 0, resolved: 0, exhausted: 0 };
+  await pruneExpiredResponseTokens();
 
   if (today.getDate() >= KICKOFF_DAY_OF_MONTH) {
     const activeUsers = await db.query.user.findMany({
@@ -79,7 +129,7 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
         remindersSent: 1,
         lastSentAt: today,
       });
-      await sendMail({ to: u.email, ...renderReminderEmail(u.name, gaps) });
+      await sendMail({ to: u.email, ...(await renderReminderEmail(u, gaps)) });
       result.kickoffsSent++;
     }
   }
@@ -110,7 +160,7 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
       .update(availabilityReminderCycles)
       .set({ remindersSent, lastSentAt: today, exhaustedAt: exhausted ? today : null })
       .where(eq(availabilityReminderCycles.id, cycle.id));
-    await sendMail({ to: cycle.user.email, ...renderReminderEmail(cycle.user.name, gaps) });
+    await sendMail({ to: cycle.user.email, ...(await renderReminderEmail(cycle.user, gaps)) });
     result.followupsSent++;
     if (exhausted) result.exhausted++;
   }
@@ -140,7 +190,7 @@ export async function sendAvailabilityRemindersNow(logger?: ReminderLogger): Pro
   for (const u of activeUsers) {
     const gaps = await getUnsetAvailabilityDates(u.id, today, windowEnd);
     if (gaps.length === 0) continue;
-    await sendMail({ to: u.email, ...renderReminderEmail(u.name, gaps) });
+    await sendMail({ to: u.email, ...(await renderReminderEmail(u, gaps)) });
     remindersSent++;
   }
 

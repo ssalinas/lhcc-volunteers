@@ -209,6 +209,24 @@ export const availabilityReminderSends = sqliteTable('availability_reminder_send
     .default(sql`(unixepoch())`),
 });
 
+// Login-free "answer from the email" links (lib/responseTokens.ts). Each availability email gets
+// a fresh random token; only its SHA-256 hash is stored, so a DB leak doesn't leak usable links.
+// A token only lets its holder set *that one user's* availability — nothing else — and expires.
+export const availabilityResponseTokens = sqliteTable(
+  'availability_response_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('availability_response_tokens_hash_idx').on(t.tokenHash)],
+);
+
 // ---------- Schedule Notifications ----------
 
 export const scheduleNotificationBatches = sqliteTable('schedule_notification_batches', {
@@ -293,6 +311,10 @@ export const volunteerRolesRelations = relations(volunteerRoles, ({ one, many })
     references: [eventRoleTemplates.id],
   }),
   assignments: many(assignments),
+}));
+
+export const availabilityResponseTokensRelations = relations(availabilityResponseTokens, ({ one }) => ({
+  user: one(user, { fields: [availabilityResponseTokens.userId], references: [user.id] }),
 }));
 
 export const availabilityRelations = relations(availability, ({ one }) => ({

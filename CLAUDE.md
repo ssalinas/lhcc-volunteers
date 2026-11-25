@@ -148,6 +148,24 @@ frontend hook together.
   row; an explicit `unavailable` row must NOT count as a gap needing a reminder). It also skips any
   occurrence whose `event.active` is `false` — an archived/inactive event's occurrences must never
   generate a reminder, even if the volunteer's team is still otherwise involved in it.
+- `modules/respond` + `lib/responseTokens.ts` — **public, no-session** endpoints
+  (`/api/respond/:token[/dates/:date]`) behind the per-date "I can serve / Can't make it" buttons
+  in availability-reminder emails, landing on the public `/respond` SPA page. Every email mints a
+  fresh random token (only its SHA-256 is stored in `availability_response_tokens`, 30-day TTL,
+  pruned by the reminder job); a token can read/write only that one user's availability and
+  nothing else, and resolves to nothing for an inactive user. The email buttons carry the answer
+  as `?d=<dates>&s=<status>`, but `/respond` shows a one-tap confirm instead of saving on page
+  load — email security scanners open every link, so saving on GET would answer for people.
+  Dates are keyed by UTC calendar date (`toUtcDateOnly`), the same key the reminder gap logic
+  uses, so answering via a link always clears that date's gap. Exists because volunteers were
+  replying to the email instead of clicking through to a page that required a login.
+  `GET /api/admin/availability-grid` (`getAvailabilityGrid` in `scheduling/availabilityGaps.ts`)
+  powers `/admin/availability` ("Who's Answered?"), a users × dates grid where one click per cell
+  records an answer — for transcribing replies/phone calls from people who don't use the buttons.
+- `lib/emailLayout.ts` — shared large-type, table-based email HTML (`emailLayout`, `emailButton`)
+  and `appUrl()` for links (`APP_URL`, defaulting to `BETTER_AUTH_URL`; only differs in local dev).
+  Without SMTP configured and outside production, `lib/mailer.ts` writes each email to
+  `apps/api/data/dev-outbox/*.html` instead, so email content/links can be checked locally.
 - `lib/mailer.ts` — outbound email via Gmail/Google Workspace SMTP (nodemailer + an app password),
   same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
   `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace

@@ -8,6 +8,7 @@ build/
 apps/api/data/*.sqlite
 apps/api/data/*.sqlite-*
 apps/api/data/backups/
+apps/api/data/dev-outbox/
 # Production DB lives at repo-root data/ (DATABASE_PATH resolves relative to the systemd
 # service's WorkingDirectory, not apps/api/) — see deploy/setup.sh and README.
 data/*.sqlite
