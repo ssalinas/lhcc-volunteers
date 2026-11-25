@@ -20,6 +20,9 @@ export const user = sqliteTable('user', {
   phone: text('phone'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   receiveAvailabilityReminders: integer('receive_availability_reminders', { mode: 'boolean' }).notNull().default(true),
+  // When an admin last sent this person the "welcome to the volunteer app" email (Users page
+  // button; modules/users/welcomeEmail.ts). App-only — not a better-auth additionalField.
+  welcomeEmailSentAt: integer('welcome_email_sent_at', { mode: 'timestamp' }),
 });
 
 export const session = sqliteTable('session', {

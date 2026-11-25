@@ -9,6 +9,7 @@ export const userSummarySchema = z.object({
   active: z.boolean(),
   phone: z.string().nullable().optional(),
   receiveAvailabilityReminders: z.boolean(),
+  welcomeEmailSentAt: z.string().datetime().nullable().optional(),
 });
 export type UserSummary = z.infer<typeof userSummarySchema>;
 
@@ -34,3 +35,10 @@ export const updateMyPreferencesSchema = z.object({
   receiveAvailabilityReminders: z.boolean(),
 });
 export type UpdateMyPreferencesInput = z.infer<typeof updateMyPreferencesSchema>;
+
+export const sendWelcomeEmailResultSchema = z.object({ sentAt: z.string().datetime() });
+export type SendWelcomeEmailResult = z.infer<typeof sendWelcomeEmailResultSchema>;
+
+/** Public: which sign-in methods the login page should offer (depends on server config). */
+export const loginOptionsSchema = z.object({ emailLink: z.boolean(), google: z.boolean() });
+export type LoginOptions = z.infer<typeof loginOptionsSchema>;

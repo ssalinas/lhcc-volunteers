@@ -17,12 +17,14 @@ import type {
   EligibleCandidate,
   Event,
   EventLastNotified,
+  LoginOptions,
   OccurrenceDetail,
   OccurrenceSummary,
   RespondPage,
   RunAvailabilityRemindersNowResult,
   RunBackupResult,
   ScheduleNotificationResult,
+  SendWelcomeEmailResult,
   TeamMember,
   TeamSummaryEntry,
   TeamWithMemberCount,
@@ -131,6 +133,12 @@ export function useClearAvailabilityForDate(userId?: string) {
   });
 }
 
+// ---------- Login page ----------
+
+export function useLoginOptions() {
+  return useQuery({ queryKey: ['login-options'], queryFn: () => api.get<LoginOptions>('/api/login-options'), staleTime: Infinity });
+}
+
 // ---------- Login-free email-link responses (/respond) ----------
 // Public: the token from the email link is the only credential (see api lib/responseTokens.ts).
 
@@ -203,6 +211,14 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateUserInput }) =>
       api.patch<UserSummary>(`/api/admin/users/${id}`, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useSendWelcomeEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<SendWelcomeEmailResult>(`/api/admin/users/${id}/send-welcome`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 }

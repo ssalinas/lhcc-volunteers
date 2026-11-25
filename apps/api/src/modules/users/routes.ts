@@ -1,8 +1,19 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { createUserSchema, updateUserSchema, updateMyPreferencesSchema, userSummarySchema, idSchema } from '@lhcc/shared';
+import {
+  createUserSchema,
+  updateUserSchema,
+  updateMyPreferencesSchema,
+  userSummarySchema,
+  idSchema,
+  sendWelcomeEmailResultSchema,
+  loginOptionsSchema,
+} from '@lhcc/shared';
 import { requireAdmin, requireAuth } from '../../auth/plugin.js';
 import * as usersService from './service.js';
+import { sendWelcomeEmail } from './welcomeEmail.js';
+import { isMailerConfigured } from '../../lib/mailer.js';
+import { env } from '../../config/env.js';
 
 function toSummary(u: {
   id: string;
@@ -12,6 +23,7 @@ function toSummary(u: {
   active: boolean;
   phone: string | null;
   receiveAvailabilityReminders: boolean;
+  welcomeEmailSentAt?: Date | null;
 }) {
   return {
     id: u.id,
@@ -21,10 +33,29 @@ function toSummary(u: {
     active: u.active,
     phone: u.phone,
     receiveAvailabilityReminders: u.receiveAvailabilityReminders,
+    welcomeEmailSentAt: u.welcomeEmailSentAt ? u.welcomeEmailSentAt.toISOString() : null,
   };
 }
 
 export const usersRoutes: FastifyPluginAsyncZod = async (app) => {
+  // Public — the login page asks which sign-in options to show. The email-link option only
+  // works when outbound email is configured (lib/mailer.ts), so it's hidden otherwise.
+  app.get('/api/login-options', { schema: { response: { 200: loginOptionsSchema } } }, async () => ({
+    emailLink: isMailerConfigured() || env.NODE_ENV !== 'production',
+    google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+  }));
+
+  // Deliberately a manual, per-person button (Users page) rather than automatic on create.
+  app.post(
+    '/api/admin/users/:id/send-welcome',
+    { schema: { params: z.object({ id: idSchema }), response: { 200: sendWelcomeEmailResultSchema } } },
+    async (request) => {
+      await requireAdmin(request);
+      const sentAt = await sendWelcomeEmail(request.params.id);
+      return { sentAt: sentAt.toISOString() };
+    },
+  );
+
   app.get('/api/me', async (request) => {
     const session = await requireAuth(request);
     const full = await usersService.getUser(session.user.id);

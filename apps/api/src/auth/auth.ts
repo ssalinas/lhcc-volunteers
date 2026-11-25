@@ -1,7 +1,45 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { magicLink } from 'better-auth/plugins/magic-link';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/client.js';
+import { user } from '../db/schema/auth.schema.js';
 import { env } from '../config/env.js';
+import { sendMail } from '../lib/mailer.js';
+import { appUrl, emailButton, emailColors, emailLayout } from '../lib/emailLayout.js';
+
+const MAGIC_LINK_TTL_MINUTES = 60;
+
+/**
+ * Passwordless "email me a sign-in link". better-auth's verify URL consumes the token on first
+ * GET, and email security scanners pre-open links — so the email links to our own /signin-link
+ * page, which only hits the verify URL when the person taps "Sign me in".
+ */
+async function sendSignInLinkEmail({ email, token, url }: { email: string; token: string; url: string }) {
+  // Only real, approved accounts get an email (disableSignUp below also stops account creation).
+  // Silently skipping — instead of erroring — avoids revealing which addresses have accounts.
+  const existing = await db.query.user.findFirst({ where: eq(user.email, email.toLowerCase()) });
+  if (!existing || !existing.active) return;
+
+  // Carry the page they were trying to reach (the login form's callbackURL) through, if it's an in-app path.
+  const callback = new URL(url).searchParams.get('callbackURL');
+  const cb = callback && callback.startsWith('/') && !callback.startsWith('//') ? `&cb=${encodeURIComponent(callback)}` : '';
+  const link = appUrl(`/signin-link?token=${encodeURIComponent(token)}${cb}`);
+  await sendMail({
+    to: existing.email,
+    subject: 'Your sign-in link for LHCC Volunteers',
+    html: emailLayout(
+      `<p style="margin:0 0 12px">Hi ${existing.name.split(' ')[0] || existing.name},</p>` +
+        `<p style="margin:0 0 16px">Tap the button below to sign in to the LHCC volunteer schedule. No password needed.</p>` +
+        `<div style="margin:0 0 16px">${emailButton(link, 'Sign me in', 'primary')}</div>` +
+        `<p style="margin:0;font-size:14px;color:${emailColors.muted}">This button works once, for the next ${MAGIC_LINK_TTL_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.</p>`,
+    ),
+    text: `Tap this link to sign in to the LHCC volunteer schedule (works once, for ${MAGIC_LINK_TTL_MINUTES} minutes):
+${link}
+
+If you didn't ask to sign in, you can ignore this email.`,
+  });
+}
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -81,8 +119,18 @@ export const auth = betterAuth({
       },
     },
   },
+  plugins: [
+    magicLink({
+      expiresIn: MAGIC_LINK_TTL_MINUTES * 60,
+      disableSignUp: true,
+      storeToken: 'hashed',
+      sendMagicLink: sendSignInLinkEmail,
+    }),
+  ],
   session: {
-    expiresIn: 60 * 60 * 24 * 30, // 30 days
+    // Long-lived on purpose: many volunteers struggle to sign in at all, so once they're in on a
+    // device they should rarely see the login page again. Refreshed daily while in use.
+    expiresIn: 60 * 60 * 24 * 180, // 180 days
     updateAge: 60 * 60 * 24, // refresh once a day of use
   },
 });

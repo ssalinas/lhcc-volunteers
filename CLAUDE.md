@@ -42,8 +42,11 @@ TRUSTED_ORIGINS=http://localhost:5173
 SEED_ADMIN_EMAIL=admin@example.com
 SEED_ADMIN_PASSWORD=changeme123
 ```
-Google sign-in is optional locally — without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, only the
-email/password login form is available, which is enough to exercise every feature.
+Google sign-in is optional locally — without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` the Google
+button is hidden (`GET /api/login-options`). The login page leads with "Email me a sign-in link";
+locally without SMTP that email lands in `apps/api/data/dev-outbox/` (open the `.html`, follow the
+link). Set `APP_URL=http://localhost:5173` in `apps/api/.env` so email links open the Vite server.
+"I have a password" reveals the password form (the seeded admin uses it).
 
 ## Architecture
 
@@ -113,6 +116,18 @@ frontend hook together.
   email/password sign-up/sign-in. This is what stops "sign in with Google" from handing out real
   access to anyone with a Google account — new Google sign-ins land inactive until an admin checks
   "Active" for them on the Users page.
+- Passwordless sign-in: `auth/auth.ts` enables better-auth's `magicLink` plugin
+  (`disableSignUp`, hashed tokens, 60-minute expiry) and sessions last 180 days — many volunteers
+  are older and can't manage a password, so they type their email, get a "Sign me in" email, and
+  then rarely see the login page again. `sendMagicLink` silently skips unknown/inactive addresses
+  (no account creation, no "does this email exist" leak). The email deliberately links to the SPA's
+  `/signin-link` page, not better-auth's verify URL: verify consumes the single-use token on the
+  first GET, and email security scanners pre-open links, which would burn the token before the
+  person taps it. `/signin-link` only navigates to verify on a button tap.
+  `POST /api/admin/users/:id/send-welcome` (`modules/users/welcomeEmail.ts`, records
+  `user.welcomeEmailSentAt`) is sent **only** by an admin clicking "Send welcome email" on the Users
+  page (also offered in the post-create toast) — never automatically on user creation. It's the one
+  email action outside `/admin/reminders`, because it's per-person.
 - `jobs/` — `generateOccurrences.ts` (materializes recurring events into dated `event_occurrences`,
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
   SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the
@@ -212,7 +227,7 @@ from an explicit `status: 'unavailable'`.
   role names via a checklist in the confirm modal, computed as the union of role names across
   everything selected) and `/admin/reminders`'s "Custom schedule notification" section (`POST
   /api/schedule/notify`, same `useOccurrencePicker` instance pattern, its own separate state).
-  Every email-sending action in the app lives on `/admin/reminders` (`Reminders.tsx`) — nothing
+  Every bulk email-sending action in the app lives on `/admin/reminders` (`Reminders.tsx`) — the per-person welcome email on the Users page is the deliberate exception — nothing
   outside that page calls `useSendAvailabilityRemindersNow`/`useSendScheduleNotifications` — and
   every one of them is gated by a confirm `Modal` before sending, never a bare button. Three
   sections: an Availability Reminders card (`sendAvailabilityRemindersNow`, "Send now" is a
