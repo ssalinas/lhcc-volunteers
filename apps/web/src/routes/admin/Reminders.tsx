@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addMonths, addWeeks, format, formatDistanceToNow } from 'date-fns';
 import { Modal } from '../../components/Modal.js';
+import { useToast } from '../../components/Toast.js';
 import { DateRangeFields, OccurrenceGroupList, useOccurrencePicker } from '../../components/OccurrencePicker.js';
 import {
   useAdminEvents,
@@ -9,6 +10,7 @@ import {
   useOccurrences,
   useSendAvailabilityRemindersNow,
   useSendScheduleNotifications,
+  useSetAvailabilityRemindersAutomatic,
 } from '../../api/hooks.js';
 
 export default function AdminReminders() {
@@ -21,6 +23,7 @@ export default function AdminReminders() {
 
       <section style={{ marginBottom: '2rem' }}>
         <h2>Availability reminders</h2>
+        <AutomaticRemindersCard />
         <AvailabilityRemindersCard />
       </section>
 
@@ -36,6 +39,65 @@ export default function AdminReminders() {
         </p>
         <ScheduleNotificationSection />
       </section>
+    </div>
+  );
+}
+
+/**
+ * On/off switch for the daily automatic reminder emails. Saves on click with a toast (like the
+ * rest of the admin UI) rather than a confirm modal: it sends nothing by itself, and turning it
+ * back off is one click away.
+ */
+function AutomaticRemindersCard() {
+  const { data: status } = useAvailabilityReminderStatus();
+  const setAutomatic = useSetAvailabilityRemindersAutomatic();
+  const toast = useToast();
+
+  if (!status) return null;
+  const enabled = status.automaticEnabled;
+
+  function toggle() {
+    setAutomatic.mutate(!enabled, {
+      onSuccess: (next) =>
+        toast(next.automaticEnabled ? 'Automatic reminders turned on' : 'Automatic reminders turned off', {
+          action: { label: 'Undo', onClick: () => setAutomatic.mutate(enabled) },
+        }),
+      onError: (err) =>
+        toast(err instanceof Error ? err.message : 'Could not change the setting', { variant: 'error' }),
+    });
+  }
+
+  return (
+    <div
+      className="card"
+      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}
+    >
+      <div>
+        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          Automatic reminder emails
+          <span className={`badge ${enabled ? 'badge-success' : 'badge-warning'}`}>{enabled ? 'On' : 'Off'}</span>
+        </div>
+        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>
+          {enabled
+            ? 'Starting on the 25th of each month, volunteers missing availability for the next 2 months get an email, with up to 3 follow-ups every 2 days.'
+            : 'No automatic availability emails will go out until this is turned back on. "Send reminders now" below still works.'}
+        </div>
+        {status.automaticChangedAt && (
+          <div style={{ color: 'var(--color-text-faint)', fontSize: '0.78rem', marginTop: '0.3rem' }}>
+            Turned {enabled ? 'on' : 'off'}
+            {status.automaticChangedBy ? ` by ${status.automaticChangedBy}` : ''}{' '}
+            {formatDistanceToNow(new Date(status.automaticChangedAt), { addSuffix: true })}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={setAutomatic.isPending}
+        className={`btn btn-sm ${enabled ? 'btn-secondary' : 'btn-primary'}`}
+      >
+        {enabled ? 'Turn off' : 'Turn on'}
+      </button>
     </div>
   );
 }
@@ -66,8 +128,8 @@ function AvailabilityRemindersCard() {
       <div>
         <div style={{ fontWeight: 600 }}>Availability reminders</div>
         <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>
-          Runs automatically every day at 8:00 AM. "Send now" is an extra nudge, right now, to anyone missing
-          availability in the next month.
+          "Send now" is an extra nudge, right now, to anyone missing availability in the next month. It
+          works whether or not automatic emails are on.
         </div>
         <div style={{ color: 'var(--color-text-faint)', fontSize: '0.78rem', marginTop: '0.3rem' }}>
           {status?.lastSentAt

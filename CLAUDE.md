@@ -139,7 +139,12 @@ frontend hook together.
   `server.ts` via `node-cron`; `generateOccurrences`/`ensureSystemTeams` also run once on boot,
   while `sendAvailabilityReminders`/`backupDb` only run on their cron schedule.
   `sendAvailabilityReminders` is state-driven off `availability_reminder_cycles` (not in-memory),
-  so a missed run or restart just resumes from what's stored. `runDatabaseBackup()` is also called
+  so a missed run or restart just resumes from what's stored. Admins can switch the automatic
+  cycle off/on from `/admin/reminders` (`PUT /api/admin/availability-reminders/automatic`): the
+  flag lives in the key/value `app_settings` table behind `lib/settings.ts` (a missing row means
+  the default, on), and `runAvailabilityReminderCycle` itself checks it and returns
+  `skipped: true`. "Send now" ignores it. Turning it back on marks open cycles from earlier months
+  exhausted, so a long pause doesn't release a burst of stale followups next to the new kickoff. `runDatabaseBackup()` is also called
   directly (not through cron) by `POST /api/admin/backups/run`, so admins can trigger an immediate
   backup from the Reports page.
 - `modules/scheduling/fairness.ts` + `autoSchedule.ts` — the fairness ranking and greedy auto-fill

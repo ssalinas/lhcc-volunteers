@@ -22,8 +22,18 @@ export const availabilityReminderStatusSchema = z.object({
   lastSentAt: z.string().datetime().nullable(),
   remindersSent: z.number().int().nonnegative().nullable(),
   triggeredBy: z.enum(['cron', 'manual']).nullable(),
+  /** Whether the daily automatic reminder job is allowed to send. "Send now" works either way. */
+  automaticEnabled: z.boolean(),
+  /** When/by whom the switch was last flipped; null if it's never been changed (default: on). */
+  automaticChangedAt: z.string().datetime().nullable(),
+  automaticChangedBy: z.string().nullable(),
 });
 export type AvailabilityReminderStatus = z.infer<typeof availabilityReminderStatusSchema>;
+
+export const setAvailabilityRemindersAutomaticSchema = z.object({
+  enabled: z.boolean(),
+});
+export type SetAvailabilityRemindersAutomaticInput = z.infer<typeof setAvailabilityRemindersAutomaticSchema>;
 
 export const eventLastNotifiedSchema = z.object({
   eventId: idSchema,
