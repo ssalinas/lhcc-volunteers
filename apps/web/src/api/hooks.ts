@@ -495,6 +495,15 @@ export function useAvailabilityReminderStatus() {
   });
 }
 
+export function useSetAvailabilityRemindersAutomatic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      api.put<AvailabilityReminderStatus>('/api/admin/availability-reminders/automatic', { enabled }),
+    onSuccess: (status) => qc.setQueryData(['admin', 'availability-reminders', 'status'], status),
+  });
+}
+
 // ---------- Backups ----------
 
 export function useBackupStatus() {

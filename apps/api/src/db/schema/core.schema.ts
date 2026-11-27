@@ -209,6 +209,17 @@ export const availabilityReminderSends = sqliteTable('availability_reminder_send
     .default(sql`(unixepoch())`),
 });
 
+// Admin-editable app-wide switches, one row per key (value is JSON-encoded). A missing row means
+// "use the default" — see lib/settings.ts, the only place that reads/writes this table.
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedByUserId: text('updated_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+});
+
 // Login-free "answer from the email" links (lib/responseTokens.ts). Each availability email gets
 // a fresh random token; only its SHA-256 hash is stored, so a DB leak doesn't leak usable links.
 // A token only lets its holder set *that one user's* availability — nothing else — and expires.

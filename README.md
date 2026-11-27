@@ -249,6 +249,10 @@ home directory, so give it one for npm's cache:
    Leaving the SMTP variables unset is fine — the reminder job silently no-ops, same as backups
    without R2 configured.
 
+   To pause the automatic reminders without touching `.env` (say, over a holiday break), use
+   **Turn off** under "Automatic reminder emails" on the admin Reminders page. "Send reminders
+   now" still works while they're off.
+
 ### Updating a deployed instance
 
 ```bash

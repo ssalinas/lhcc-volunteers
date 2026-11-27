@@ -9,6 +9,7 @@ import { newId } from '../lib/ids.js';
 import { createResponseToken, pruneExpiredResponseTokens, RESPONSE_TOKEN_TTL_DAYS } from '../lib/responseTokens.js';
 import { appUrl, emailButton, emailColors, emailLayout, escapeHtml } from '../lib/emailLayout.js';
 import { toAppDateKey } from '../lib/dates.js';
+import { isAvailabilityRemindersAutomaticEnabled } from '../lib/settings.js';
 
 const WINDOW_MONTHS = 2;
 const MANUAL_WINDOW_MONTHS = 1;
@@ -29,6 +30,8 @@ export interface ReminderCycleResult {
   followupsSent: number;
   resolved: number;
   exhausted: number;
+  /** True when an admin has turned automatic reminders off (Reminders page), so nothing was sent. */
+  skipped: boolean;
 }
 
 /**
@@ -108,8 +111,16 @@ export async function runAvailabilityReminderCycle(logger?: ReminderLogger): Pro
   const cycleMonth = todayKey.slice(0, 7);
   const dayOfMonth = Number(todayKey.slice(8, 10));
 
-  const result: ReminderCycleResult = { kickoffsSent: 0, followupsSent: 0, resolved: 0, exhausted: 0 };
+  const result: ReminderCycleResult = { kickoffsSent: 0, followupsSent: 0, resolved: 0, exhausted: 0, skipped: false };
   await pruneExpiredResponseTokens();
+
+  // Admins can pause the automatic schedule from /admin/reminders. Checked here rather than in
+  // server.ts's cron callback so anything that runs the cycle respects it. While paused, cycles
+  // simply don't advance; "Send now" (sendAvailabilityRemindersNow) still works.
+  if (!(await isAvailabilityRemindersAutomaticEnabled())) {
+    logger?.info({}, 'Automatic availability reminders are turned off; skipping cycle');
+    return { ...result, skipped: true };
+  }
 
   if (dayOfMonth >= KICKOFF_DAY_OF_MONTH) {
     const activeUsers = await db.query.user.findMany({
