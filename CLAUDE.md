@@ -186,6 +186,13 @@ frontend hook together.
   same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
   `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace
   account instead of a new service.
+- `deploy/` — `setup.sh` is both first-time setup and the update script (pull `main`, `npm ci`,
+  migrate, seed, build, refresh systemd unit, restart). `setup-auto-update.sh` (run once)
+  installs `lhcc-volunteers-update.timer`, which runs `auto-update.sh` as root every 5 minutes:
+  `git fetch`, and if `origin/main` differs from `/var/lib/lhcc-volunteers-update/deployed-commit`
+  it runs `setup.sh`. A failed commit is recorded in `failed-commit` and not retried until main
+  moves. `setup.sh` must stay non-interactive and must leave the checkout clean (hence `npm ci`,
+  not `npm install`) or unattended deploys break.
 
 ### Data model
 
@@ -203,7 +210,12 @@ every already-materialized **future** occurrence — removal skips any role that
 assignment — so a template change shows up on upcoming dates immediately instead of only on
 dates generated past the horizon.
 
-`teams` / `team_memberships` are separate from all of the above. One team is special:
+`teams` / `team_memberships` are separate from all of the above. `DELETE /api/teams/:id`
+(`teams/service.ts::removeTeam`) refuses (409, naming the events) while any role template or
+upcoming occurrence's role uses the team; otherwise it hard-deletes, or — if past
+`volunteer_roles` still reference it — archives it (`active = false`, memberships dropped) so
+history keeps its name. `listTeams` and the team-summary report hide inactive teams, and
+`createTeam` with an archived team's name restores that team instead of 409ing. One team is special:
 `teams.isSystemTeam` marks the auto-provisioned "All Volunteers" team, which has **no real
 `team_memberships` rows** — `fairness.ts` and `modules/teams/service.ts` special-case it to treat
 every active user as a member. Assign a role to this team when it can be filled by anyone.
@@ -219,8 +231,10 @@ from an explicit `status: 'unavailable'`.
   is the thin fetch wrapper. Add new hooks here rather than calling `fetch` from components.
 - `routes/` — volunteer-facing pages; `routes/admin/` — admin-only pages, gated by `RequireAdmin` in
   `App.tsx` (`RequireAuth` for anyone-signed-in routes). Occurrences have two views over the same
-  data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers who
-  click through from the Calendar).
+  data: `/admin/occurrences/:id` (full edit) and `/occurrences/:id` (read-only, for volunteers via
+  a direct link). The Calendar doesn't navigate to either — it opens a popup (`OccurrencePopup`) with
+  the same read-only roster (`components/OccurrenceRoster.tsx`, shared with `/occurrences/:id`)
+  and admins get an "Edit assignments" link from there.
   `components/OccurrencePicker.tsx` factors out "pick a date range, then check off occurrences
   grouped by event (with a 'Select all' per group)" into `useOccurrencePicker()` +
   `<DateRangeFields>` + `<OccurrenceGroupList>`, shared by two pages that both need exactly this:

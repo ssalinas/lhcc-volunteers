@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for LHCC Volunteers updates every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

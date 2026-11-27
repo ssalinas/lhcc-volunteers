@@ -62,6 +62,14 @@ export function useUpdateTeam() {
   });
 }
 
+export function useDeleteTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ archived: boolean }>(`/api/teams/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
+  });
+}
+
 export function useTeamMembers(teamId: string | undefined) {
   return useQuery({
     queryKey: ['teams', teamId, 'members'],

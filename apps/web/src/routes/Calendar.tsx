@@ -12,15 +12,17 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useSession } from '../auth/client.js';
-import { useOccurrences } from '../api/hooks.js';
+import { useOccurrence, useOccurrences } from '../api/hooks.js';
+import { Modal } from '../components/Modal.js';
+import { OccurrenceRoster } from '../components/OccurrenceRoster.js';
 
 export default function Calendar() {
   const [cursor, setCursor] = useState(() => new Date());
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'admin';
-  const navigate = useNavigate();
+  const [openOccurrenceId, setOpenOccurrenceId] = useState<string | null>(null);
 
   const monthStart = startOfMonth(cursor);
   const monthEnd = endOfMonth(cursor);
@@ -92,7 +94,7 @@ export default function Calendar() {
                     key={o.id}
                     type="button"
                     className="calendar-occurrence-chip"
-                    onClick={() => navigate(isAdmin ? `/admin/occurrences/${o.id}` : `/occurrences/${o.id}`)}
+                    onClick={() => setOpenOccurrenceId(o.id)}
                     style={{
                       textAlign: 'left',
                       fontSize: '0.7rem',
@@ -115,11 +117,64 @@ export default function Calendar() {
         })}
       </div>
 
+      {openOccurrenceId && (
+        <OccurrencePopup
+          occurrenceId={openOccurrenceId}
+          isAdmin={isAdmin}
+          currentUserId={session?.user.id}
+          onClose={() => setOpenOccurrenceId(null)}
+        />
+      )}
+
       <div style={{ marginTop: '1.25rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
         <LegendSwatch color="var(--color-primary)" label="You're assigned" />
         <LegendSwatch color="var(--color-primary-light)" label="Volunteer opportunity" />
       </div>
     </div>
+  );
+}
+
+/** Click-an-event popup: who's serving in each role, without leaving the calendar. */
+function OccurrencePopup({
+  occurrenceId,
+  isAdmin,
+  currentUserId,
+  onClose,
+}: {
+  occurrenceId: string;
+  isAdmin: boolean;
+  currentUserId?: string;
+  onClose: () => void;
+}) {
+  const { data: occurrence, isLoading, error } = useOccurrence(occurrenceId);
+
+  return (
+    <Modal title={occurrence?.eventName ?? 'Event'} onClose={onClose} width={520}>
+      {isLoading && <p style={{ margin: 0 }}>Loading…</p>}
+      {error && <p style={{ margin: 0, color: 'var(--color-danger)' }}>Couldn't load this event.</p>}
+      {occurrence && (
+        <>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: 0 }}>
+            {format(new Date(occurrence.startAt), 'EEEE, MMMM d · p')}
+            {occurrence.location && ` · ${occurrence.location}`}
+            {occurrence.status === 'canceled' && (
+              <span className="badge badge-danger" style={{ marginLeft: '0.5rem' }}>Canceled</span>
+            )}
+          </p>
+          {occurrence.notes && <p style={{ fontSize: '0.9rem' }}>{occurrence.notes}</p>}
+          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            <OccurrenceRoster occurrence={occurrence} currentUserId={currentUserId} />
+          </div>
+          {isAdmin && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <Link to={`/admin/occurrences/${occurrence.id}`} className="btn btn-primary btn-sm">
+                Edit assignments
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }
 

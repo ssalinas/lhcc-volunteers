@@ -147,6 +147,31 @@ deploy the latest `main`.
    This installs/enables the systemd service and starts it; tail logs with
    `sudo journalctl -u lhcc-volunteers -f`.
 
+### Automatic updates: `deploy/setup-auto-update.sh`
+
+Once the app is deployed and running, run this once to have every merge to `main` deploy
+itself:
+
+```bash
+./deploy/setup-auto-update.sh
+```
+
+It installs a systemd timer (`lhcc-volunteers-update.timer`) that runs `deploy/auto-update.sh`
+every 5 minutes. That script does a `git fetch`; if `origin/main` has moved past the last
+successfully deployed commit, it runs `deploy/setup.sh` (pull, `npm ci`, migrate, build,
+restart). Nothing is rebuilt when `main` hasn't changed. If a deploy fails, that commit isn't
+retried — the next merge to `main` will be — so a broken merge doesn't rebuild on the Pi
+over and over. The running app keeps the code it already loaded, but a reboot or crash-restart
+would pick up the half-finished build, so merge a fix promptly.
+
+- Watch it: `journalctl -u lhcc-volunteers-update -f`
+- Next check: `systemctl list-timers lhcc-volunteers-update.timer`
+- Deploy right now instead of waiting: `sudo systemctl start lhcc-volunteers-update`
+- Turn it off: `sudo systemctl disable --now lhcc-volunteers-update.timer`
+
+The timer fetches as root without a prompt, so `origin` must be readable unattended (a public
+HTTPS remote, or a read-only GitHub deploy key for a private repo) — the setup script checks this.
+
 ### Manual path
 
 If you'd rather do it by hand, or want to understand what the scripts do:
