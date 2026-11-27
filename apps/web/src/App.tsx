@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAdmin, RequireAuth } from './auth/RequireAuth.js';
 import AppLayout from './components/AppLayout.js';
 import Login from './routes/Login.js';
+import Respond from './routes/Respond.js';
+import SignInLink from './routes/SignInLink.js';
 import Calendar from './routes/Calendar.js';
 import Availability from './routes/Availability.js';
 import Teams from './routes/Teams.js';
@@ -14,11 +16,16 @@ import AdminOccurrenceDetail from './routes/admin/OccurrenceDetail.js';
 import AdminTeams from './routes/admin/Teams.js';
 import AdminUsers from './routes/admin/Users.js';
 import AdminReports from './routes/admin/Reports.js';
+import AdminAvailabilityGrid from './routes/admin/AvailabilityGrid.js';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Public: answered from availability-email links, no sign-in (token in ?t=). */}
+      <Route path="/respond" element={<Respond />} />
+      {/* Public: landing page for "Your sign-in link" emails (scanner-safe; see SignInLink.tsx). */}
+      <Route path="/signin-link" element={<SignInLink />} />
 
       <Route
         path="/"
@@ -137,6 +144,16 @@ export default function App() {
           <RequireAdmin>
             <AppLayout>
               <AdminUsers />
+            </AppLayout>
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/availability"
+        element={
+          <RequireAdmin>
+            <AppLayout>
+              <AdminAvailabilityGrid />
             </AppLayout>
           </RequireAdmin>
         }

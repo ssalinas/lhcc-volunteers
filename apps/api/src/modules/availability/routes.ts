@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { setAvailabilityStatusSchema, idSchema } from '@lhcc/shared';
 import { requireAdmin, requireAuth } from '../../auth/plugin.js';
 import * as availabilityService from './service.js';
+import { getAvailabilityGrid } from '../scheduling/availabilityGaps.js';
 
 function toDto(e: { id: string; userId: string; startDate: string; endDate: string; status: string; createdAt: Date }) {
   return {
@@ -45,6 +46,17 @@ export const availabilityRoutes: FastifyPluginAsyncZod = async (app) => {
       const session = await requireAuth(request);
       await availabilityService.clearAvailabilityForDate(session.user.id, request.params.date);
       reply.status(204);
+    },
+  );
+
+  // Registered before '/api/availability/:userId' for readability; Fastify's router prefers the
+  // static segment regardless.
+  app.get(
+    '/api/admin/availability-grid',
+    { schema: { querystring: z.object({ from: z.string().datetime(), to: z.string().datetime() }) } },
+    async (request) => {
+      await requireAdmin(request);
+      return getAvailabilityGrid(new Date(request.query.from), new Date(request.query.to));
     },
   );
 

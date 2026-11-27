@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { format } from 'date-fns';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { addDays, format } from 'date-fns';
 import type { CreateEventRoleTemplateInput } from '@lhcc/shared';
 import { Modal } from '../../components/Modal.js';
-import { useTeams } from '../../api/hooks.js';
+import { useToast } from '../../components/Toast.js';
+import { useUnsavedChangesWarning } from '../../components/useUnsavedChangesWarning.js';
+import { useOccurrences, useTeams } from '../../api/hooks.js';
 import {
   useAddRoleTemplate,
   useAdminEvent,
@@ -26,10 +28,18 @@ const WEEKDAYS = [
 
 type RoleRow = CreateEventRoleTemplateInput;
 
+/**
+ * One save model for the whole page: every change — event details, new roles, removed roles —
+ * stays pending until the single Save button, and an "unsaved changes" bar + leave-page warning
+ * make that state obvious. (Previously roles had their own separate Add/Remove buttons that
+ * saved instantly while everything else needed Save, so a role typed in and followed by
+ * "Save changes" was silently dropped.)
+ */
 export default function AdminEventEditor() {
   const { eventId } = useParams();
   const isEditing = !!eventId;
   const navigate = useNavigate();
+  const toast = useToast();
   const { data: teams } = useTeams();
   const { data: existingEvent } = useAdminEvent(eventId);
 
@@ -51,11 +61,13 @@ export default function AdminEventEditor() {
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [occurrenceDate, setOccurrenceDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [removedTemplateIds, setRemovedTemplateIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false);
   const [regenerateAfterSave, setRegenerateAfterSave] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  function resetFromExisting() {
     if (!existingEvent) return;
     setName(existingEvent.name);
     setDescription(existingEvent.description ?? '');
@@ -65,7 +77,29 @@ export default function AdminEventEditor() {
     setTimezone(existingEvent.timezone);
     setIsRecurring(existingEvent.isRecurring);
     setRecurrenceEndDate(existingEvent.recurrenceEndDate ?? '');
-  }, [existingEvent]);
+    setRoles([]);
+    setRemovedTemplateIds(new Set());
+    setRegenerateAfterSave(false);
+    setError(null);
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(resetFromExisting, [existingEvent]);
+
+  const dirty = isEditing
+    ? !!existingEvent &&
+      (name !== existingEvent.name ||
+        description !== (existingEvent.description ?? '') ||
+        location !== (existingEvent.location ?? '') ||
+        defaultStartTime !== existingEvent.defaultStartTime ||
+        defaultDurationMinutes !== existingEvent.defaultDurationMinutes ||
+        timezone !== existingEvent.timezone ||
+        recurrenceEndDate !== (existingEvent.recurrenceEndDate ?? '') ||
+        roles.length > 0 ||
+        removedTemplateIds.size > 0)
+    : !!name || !!description || !!location || roles.length > 0;
+
+  useUnsavedChangesWarning(dirty && !saving);
 
   function addRoleRow() {
     if (!teams || teams.length === 0) return;
@@ -80,32 +114,63 @@ export default function AdminEventEditor() {
     setRoles((rows) => rows.filter((_, i) => i !== index));
   }
 
+  function toggleRemoveTemplate(id: string) {
+    setRemovedTemplateIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Blocks saving (with a clear message) instead of silently dropping a half-filled role row. */
+  function validate(): boolean {
+    if (roles.some((r) => !r.name.trim())) {
+      setError('Each new role needs a name. Fill it in, or click ✕ to remove that row.');
+      return false;
+    }
+    return true;
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setShowConfirm(true);
+    if (!validate()) return;
+    if (isEditing) void handleSaveEdits();
+    else setShowCreateConfirm(true);
   }
 
-  function handleConfirmSave() {
-    setError(null);
-
-    if (isEditing && eventId) {
-      updateEvent.mutate(
-        {
-          id: eventId,
-          input: { name, description, location, defaultStartTime, defaultDurationMinutes, timezone, recurrenceEndDate: recurrenceEndDate || null },
-        },
-        {
-          onSuccess: () => {
-            setShowConfirm(false);
-            if (regenerateAfterSave) regenerate.mutate(eventId);
-          },
-          onError: (err) => setError(err instanceof Error ? err.message : 'Failed to save'),
-        },
-      );
-      return;
+  async function handleSaveEdits() {
+    if (!eventId) return;
+    setSaving(true);
+    try {
+      await updateEvent.mutateAsync({
+        id: eventId,
+        input: { name, description, location, defaultStartTime, defaultDurationMinutes, timezone, recurrenceEndDate: recurrenceEndDate || null },
+      });
+      for (const templateId of removedTemplateIds) {
+        await deleteRoleTemplate.mutateAsync({ eventId, templateId });
+      }
+      for (const [i, row] of roles.entries()) {
+        await addRoleTemplate.mutateAsync({
+          eventId,
+          input: { ...row, name: row.name.trim(), sortOrder: (existingEvent?.roleTemplates?.length ?? 0) + i },
+        });
+      }
+      if (regenerateAfterSave) await regenerate.mutateAsync(eventId);
+      // State resets via the useEffect once the refetched event arrives.
+      toast('Saved ✓');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
+      toast('Could not save — see the message on the page', { variant: 'error' });
+    } finally {
+      setSaving(false);
     }
+  }
 
+  function handleConfirmCreate() {
+    setError(null);
+    const cleanRoles = roles.map((r) => ({ ...r, name: r.name.trim() }));
     const base = { name, description, location, defaultStartTime, defaultDurationMinutes, timezone };
     const payload = isRecurring
       ? {
@@ -114,29 +179,36 @@ export default function AdminEventEditor() {
           rrule: `FREQ=WEEKLY;BYDAY=${weekday}`,
           dtstart: new Date(`${dtstart}T00:00:00.000Z`).toISOString(),
           recurrenceEndDate: recurrenceEndDate || undefined,
-          roleTemplates: roles,
+          roleTemplates: cleanRoles,
         }
       : {
           ...base,
           isRecurring: false as const,
           occurrenceDate,
-          roleTemplates: roles,
+          roleTemplates: cleanRoles,
         };
 
+    setSaving(true);
     createEvent.mutate(payload, {
       onSuccess: (created) => {
-        setShowConfirm(false);
+        setShowCreateConfirm(false);
         navigate(`/admin/events/${created.id}`);
+        toast(`Created "${created.name}"`, {
+          action: { label: 'Schedule volunteers', onClick: () => navigate('/admin/schedule') },
+        });
       },
       onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create event'),
+      onSettled: () => setSaving(false),
     });
   }
+
+  const existingTemplates = isEditing ? existingEvent?.roleTemplates ?? [] : [];
 
   return (
     <div>
       <h1>{isEditing ? 'Edit Event' : 'New Event'}</h1>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 600 }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 640 }}>
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
@@ -147,7 +219,7 @@ export default function AdminEventEditor() {
           <input value={location} onChange={(e) => setLocation(e.target.value)} />
         </Field>
 
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <Field label="Start time">
             <input type="time" value={defaultStartTime} onChange={(e) => setDefaultStartTime(e.target.value)} required />
           </Field>
@@ -175,10 +247,10 @@ export default function AdminEventEditor() {
           <Field label="Event type">
             <div style={{ display: 'flex', gap: '1rem' }}>
               <label>
-                <input type="radio" checked={!isRecurring} onChange={() => setIsRecurring(false)} /> One-off
+                <input type="radio" checked={!isRecurring} onChange={() => setIsRecurring(false)} /> One-time
               </label>
               <label>
-                <input type="radio" checked={isRecurring} onChange={() => setIsRecurring(true)} /> Recurring
+                <input type="radio" checked={isRecurring} onChange={() => setIsRecurring(true)} /> Repeats every week
               </label>
             </div>
           </Field>
@@ -191,7 +263,7 @@ export default function AdminEventEditor() {
         )}
 
         {!isEditing && isRecurring && (
-          <div style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <Field label="Repeats weekly on">
               <select value={weekday} onChange={(e) => setWeekday(e.target.value)}>
                 {WEEKDAYS.map((w) => (
@@ -201,112 +273,123 @@ export default function AdminEventEditor() {
                 ))}
               </select>
             </Field>
-            <Field label="First occurrence">
+            <Field label="Starting from">
               <input type="date" value={dtstart} onChange={(e) => setDtstart(e.target.value)} required />
             </Field>
           </div>
         )}
 
-        {(isRecurring || isEditing) && (
-          <Field label="Recurrence end date (optional)">
+        {isRecurring && (
+          <Field label="Stop repeating after (optional)">
             <input type="date" value={recurrenceEndDate} onChange={(e) => setRecurrenceEndDate(e.target.value)} />
           </Field>
         )}
 
         <div>
-          <h3>Roles needed</h3>
-          {(isEditing ? existingEvent?.roleTemplates ?? [] : []).map((t) => (
-            <div key={t.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
-              <span style={{ flex: 1 }}>
-                {t.name} · {teams?.find((tm) => tm.id === t.teamId)?.name ?? t.teamId} · {t.slotsCount} slot(s)
-                {t.stackable ? ' · stackable' : ''}
-              </span>
-              <button
-                type="button"
-                onClick={() => eventId && deleteRoleTemplate.mutate({ eventId, templateId: t.id })}
-                className="btn-ghost"
+          <h3 style={{ marginBottom: '0.25rem' }}>Roles needed</h3>
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+            {isEditing
+              ? 'Role changes apply to every upcoming date of this event when you save. Roles that already have someone assigned are never removed.'
+              : 'The jobs that need volunteers each time, e.g. "Greeter" from the Greeters team.'}
+          </p>
+
+          {existingTemplates.map((t) => {
+            const removing = removedTemplateIds.has(t.id);
+            return (
+              <div
+                key={t.id}
+                style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', opacity: removing ? 0.6 : 1 }}
               >
-                Remove
-              </button>
-            </div>
-          ))}
+                <span style={{ flex: 1, textDecoration: removing ? 'line-through' : undefined }}>
+                  <strong>{t.name}</strong> · {teams?.find((tm) => tm.id === t.teamId)?.name ?? t.teamId} team ·{' '}
+                  {t.slotsCount} {t.slotsCount === 1 ? 'person' : 'people'}
+                  {t.stackable ? ' · stackable' : ''}
+                </span>
+                {removing && <span className="badge badge-warning">Will be removed</span>}
+                <button type="button" onClick={() => toggleRemoveTemplate(t.id)} className="btn btn-secondary btn-sm">
+                  {removing ? 'Keep' : 'Remove'}
+                </button>
+              </div>
+            );
+          })}
 
           {roles.map((row, i) => (
             <RoleRowEditor
               key={i}
               row={row}
               teams={teams ?? []}
+              isNew={isEditing}
               onChange={(patch) => updateRoleRow(i, patch)}
               onRemove={() => removeRoleRow(i)}
             />
           ))}
 
-          {isEditing ? (
-            <AddExistingRoleForm
-              teams={teams ?? []}
-              onAdd={(input) => eventId && addRoleTemplate.mutate({ eventId, input })}
-            />
-          ) : (
-            <button type="button" onClick={addRoleRow} className="btn btn-secondary btn-sm" style={{ marginTop: '0.5rem' }}>
-              + Add role
-            </button>
-          )}
-        </div>
-
-        {error && !showConfirm && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
-
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" className="btn btn-primary">
-            {isEditing ? 'Save changes' : 'Create event'}
+          <button type="button" onClick={addRoleRow} className="btn btn-secondary btn-sm" style={{ marginTop: '0.5rem' }}>
+            + Add role
           </button>
         </div>
+
+        {isEditing && existingEvent?.isRecurring && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.9rem' }}>
+            <input
+              type="checkbox"
+              checked={regenerateAfterSave}
+              onChange={(e) => setRegenerateAfterSave(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              When I save, also update upcoming dates to match a changed time or end date — adds any newly-valid
+              dates and removes future dates that no longer fit and have nobody assigned yet.
+            </span>
+          </label>
+        )}
+
+        {error && !showCreateConfirm && <p style={{ color: 'var(--color-danger)', fontWeight: 600, margin: 0 }}>{error}</p>}
+
+        {isEditing ? (
+          dirty ? (
+            <div className="unsaved-bar">
+              <span>You have unsaved changes</span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" onClick={resetFromExisting} disabled={saving} className="btn btn-secondary">
+                  Discard
+                </button>
+                <button type="submit" disabled={saving} className="btn btn-primary">
+                  {saving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-success)', fontWeight: 600, margin: 0 }}>✓ All changes saved</p>
+          )
+        ) : (
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button type="submit" className="btn btn-primary">
+              Create event
+            </button>
+          </div>
+        )}
       </form>
 
-      {showConfirm && (
-        <Modal title={isEditing ? 'Save changes?' : 'Create this event?'} onClose={() => setShowConfirm(false)}>
+      {isEditing && eventId && <UpcomingDates eventId={eventId} />}
+
+      {showCreateConfirm && (
+        <Modal title="Create this event?" onClose={() => setShowCreateConfirm(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <p style={{ margin: 0 }}>
-              {isEditing ? (
-                <>
-                  Save changes to <strong>{name}</strong>?
-                </>
-              ) : (
-                <>
-                  Create <strong>{name || 'this event'}</strong>{' '}
-                  {isRecurring ? `repeating weekly on ${WEEKDAYS.find((w) => w.value === weekday)?.label}s` : `on ${occurrenceDate}`}?
-                </>
-              )}
+              Create <strong>{name || 'this event'}</strong>{' '}
+              {isRecurring ? `every ${WEEKDAYS.find((w) => w.value === weekday)?.label}` : `on ${occurrenceDate}`} with{' '}
+              {roles.length === 0 ? 'no roles yet' : `${roles.length} role${roles.length === 1 ? '' : 's'}`}?
             </p>
-
-            {isEditing && existingEvent?.isRecurring && (
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.9rem' }}>
-                <input
-                  type="checkbox"
-                  checked={regenerateAfterSave}
-                  onChange={(e) => setRegenerateAfterSave(e.target.checked)}
-                  style={{ marginTop: 3 }}
-                />
-                <span>
-                  Also regenerate future occurrences now — adds any newly-valid dates and removes future,
-                  unassigned occurrences that no longer match. Occurrences with existing assignments are never
-                  touched.
-                </span>
-              </label>
-            )}
 
             {error && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{error}</p>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button type="button" onClick={() => setShowConfirm(false)} className="btn btn-secondary">
+              <button type="button" onClick={() => setShowCreateConfirm(false)} className="btn btn-secondary">
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmSave}
-                disabled={createEvent.isPending || updateEvent.isPending}
-                className="btn btn-primary"
-              >
-                {isEditing ? 'Save' : 'Create'}
+              <button type="button" onClick={handleConfirmCreate} disabled={createEvent.isPending} className="btn btn-primary">
+                Create
               </button>
             </div>
           </div>
@@ -316,66 +399,87 @@ export default function AdminEventEditor() {
   );
 }
 
+/** "What's next" after setting up an event: links straight to each upcoming date's scheduling page. */
+function UpcomingDates({ eventId }: { eventId: string }) {
+  const now = useMemo(() => new Date(), []);
+  const horizon = useMemo(() => addDays(now, 120), [now]);
+  const { data: occurrences } = useOccurrences(now.toISOString(), horizon.toISOString());
+  const upcoming = (occurrences ?? [])
+    .filter((o) => o.eventId === eventId)
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+    .slice(0, 8);
+
+  return (
+    <div style={{ marginTop: '2rem', maxWidth: 640 }}>
+      <h3 style={{ marginBottom: '0.25rem' }}>Upcoming dates</h3>
+      <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+        Click a date to assign volunteers or add a one-off role just for that day.
+      </p>
+      {upcoming.length === 0 && <p style={{ color: 'var(--color-text-faint)' }}>No upcoming dates.</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        {upcoming.map((o) => (
+          <Link
+            key={o.id}
+            to={`/admin/occurrences/${o.id}`}
+            className="card"
+            style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 1rem', textDecoration: 'none', color: 'inherit' }}
+          >
+            <span style={{ fontWeight: 600 }}>{format(new Date(o.startAt), 'EEE, MMM d · p')}</span>
+            <span className={`badge ${o.totalSlots > 0 && o.filledSlots >= o.totalSlots ? 'badge-success' : 'badge-warning'}`}>
+              {o.filledSlots}/{o.totalSlots} filled →
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RoleRowEditor({
   row,
   teams,
+  isNew,
   onChange,
   onRemove,
 }: {
   row: RoleRow;
   teams: { id: string; name: string }[];
+  isNew?: boolean;
   onChange: (patch: Partial<RoleRow>) => void;
   onRemove: () => void;
 }) {
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
-      <select value={row.teamId} onChange={(e) => onChange({ teamId: e.target.value })}>
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+      {isNew && <span className="badge badge-warning">New</span>}
+      <input
+        placeholder="Role name, e.g. Greeter"
+        value={row.name}
+        onChange={(e) => onChange({ name: e.target.value })}
+        style={{ flex: 1, minWidth: 160, borderColor: row.name.trim() ? undefined : 'var(--color-accent)' }}
+        aria-label="Role name"
+      />
+      <select value={row.teamId} onChange={(e) => onChange({ teamId: e.target.value })} aria-label="Team">
         {teams.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
           </option>
         ))}
       </select>
-      <input placeholder="Role name" value={row.name} onChange={(e) => onChange({ name: e.target.value })} style={{ flex: 1 }} />
-      <input
-        type="number"
-        min={1}
-        value={row.slotsCount}
-        onChange={(e) => onChange({ slotsCount: Number(e.target.value) })}
-        style={{ width: 60 }}
-      />
+      <label style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+        People
+        <input
+          type="number"
+          min={1}
+          value={row.slotsCount}
+          onChange={(e) => onChange({ slotsCount: Number(e.target.value) })}
+          style={{ width: 60 }}
+        />
+      </label>
       <label style={{ fontSize: '0.8rem' }}>
         <input type="checkbox" checked={row.stackable} onChange={(e) => onChange({ stackable: e.target.checked })} /> stackable
       </label>
-      <button type="button" onClick={onRemove} className="btn-ghost">
+      <button type="button" onClick={onRemove} className="btn-ghost" aria-label="Remove this role row">
         ✕
-      </button>
-    </div>
-  );
-}
-
-function AddExistingRoleForm({
-  teams,
-  onAdd,
-}: {
-  teams: { id: string; name: string }[];
-  onAdd: (input: CreateEventRoleTemplateInput) => void;
-}) {
-  const [row, setRow] = useState<RoleRow>({ teamId: teams[0]?.id ?? '', name: '', slotsCount: 1, stackable: false, sortOrder: 0 });
-  if (teams.length === 0) return null;
-  return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
-      <RoleRowEditor row={row} teams={teams} onChange={(patch) => setRow((r) => ({ ...r, ...patch }))} onRemove={() => setRow({ teamId: teams[0]?.id ?? '', name: '', slotsCount: 1, stackable: false, sortOrder: 0 })} />
-      <button
-        type="button"
-        onClick={() => {
-          if (!row.name) return;
-          onAdd(row);
-          setRow({ teamId: teams[0]?.id ?? '', name: '', slotsCount: 1, stackable: false, sortOrder: 0 });
-        }}
-        className="btn btn-primary btn-sm"
-      >
-        Add
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays, format } from 'date-fns';
+import { toAppDateKey } from '@lhcc/shared';
 import type { AvailabilityStatus } from '@lhcc/shared';
 import { useOccurrences, useAvailabilityFor, useSetAvailabilityForDate, useClearAvailabilityForDate } from '../api/hooks.js';
 
@@ -25,7 +26,7 @@ export function AvailabilityDateList({ userId }: { userId?: string }) {
   const dates = useMemo(() => {
     const byDate = new Map<string, Set<string>>();
     for (const o of occurrences ?? []) {
-      const key = format(new Date(o.startAt), 'yyyy-MM-dd');
+      const key = toAppDateKey(o.startAt);
       const entry = byDate.get(key) ?? new Set<string>();
       entry.add(o.eventName);
       byDate.set(key, entry);

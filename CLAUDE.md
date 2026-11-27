@@ -42,8 +42,11 @@ TRUSTED_ORIGINS=http://localhost:5173
 SEED_ADMIN_EMAIL=admin@example.com
 SEED_ADMIN_PASSWORD=changeme123
 ```
-Google sign-in is optional locally — without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, only the
-email/password login form is available, which is enough to exercise every feature.
+Google sign-in is optional locally — without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` the Google
+button is hidden (`GET /api/login-options`). The login page leads with "Email me a sign-in link";
+locally without SMTP that email lands in `apps/api/data/dev-outbox/` (open the `.html`, follow the
+link). Set `APP_URL=http://localhost:5173` in `apps/api/.env` so email links open the Vite server.
+"I have a password" reveals the password form (the seeded admin uses it).
 
 ## Architecture
 
@@ -75,7 +78,8 @@ frontend hook together.
   concern" — `POST /api/schedule/notify` emails every active member of every team involved in a
   batch of occurrences (not just who's assigned) the full named roster, via `lib/mailer.ts`, and
   logs the send in `schedule_notification_batches` + `..._batch_occurrences` + `..._recipients`
-  for audit/dedup purposes; `GET /api/admin/schedule-notifications/last-sent` aggregates that log
+  for audit/dedup purposes — each recipient's copy also has a "You're scheduled to serve" callout
+  if they're assigned, and a personal login-free `/respond` link (see `modules/respond` below); `GET /api/admin/schedule-notifications/last-sent` aggregates that log
   by event (`getLastNotifiedByEvent`, `MAX(createdAt)` grouped through the batch-occurrences join)
   for the same kind of admin visibility. There's deliberately no separate "batch" auto-schedule
   endpoint — the frontend instead loops the existing `POST /api/occurrences/:id/auto-schedule`
@@ -113,6 +117,18 @@ frontend hook together.
   email/password sign-up/sign-in. This is what stops "sign in with Google" from handing out real
   access to anyone with a Google account — new Google sign-ins land inactive until an admin checks
   "Active" for them on the Users page.
+- Passwordless sign-in: `auth/auth.ts` enables better-auth's `magicLink` plugin
+  (`disableSignUp`, hashed tokens, 60-minute expiry) and sessions last 180 days — many volunteers
+  are older and can't manage a password, so they type their email, get a "Sign me in" email, and
+  then rarely see the login page again. `sendMagicLink` silently skips unknown/inactive addresses
+  (no account creation, no "does this email exist" leak). The email deliberately links to the SPA's
+  `/signin-link` page, not better-auth's verify URL: verify consumes the single-use token on the
+  first GET, and email security scanners pre-open links, which would burn the token before the
+  person taps it. `/signin-link` only navigates to verify on a button tap.
+  `POST /api/admin/users/:id/send-welcome` (`modules/users/welcomeEmail.ts`, records
+  `user.welcomeEmailSentAt`) is sent **only** by an admin clicking "Send welcome email" on the Users
+  page (also offered in the post-create toast) — never automatically on user creation. It's the one
+  email action outside `/admin/reminders`, because it's per-person.
 - `jobs/` — `generateOccurrences.ts` (materializes recurring events into dated `event_occurrences`,
   see below), `ensureSystemTeams.ts` (provisions the "All Volunteers" team), `backupDb.ts` (nightly
   SQLite backup, always kept locally; also uploads to Cloudflare R2 via `lib/r2.ts` and prunes the
@@ -148,6 +164,24 @@ frontend hook together.
   row; an explicit `unavailable` row must NOT count as a gap needing a reminder). It also skips any
   occurrence whose `event.active` is `false` — an archived/inactive event's occurrences must never
   generate a reminder, even if the volunteer's team is still otherwise involved in it.
+- `modules/respond` + `lib/responseTokens.ts` — **public, no-session** endpoints
+  (`/api/respond/:token[/dates/:date]`) behind the per-date "I can serve / Can't make it" buttons
+  in availability-reminder emails, landing on the public `/respond` SPA page. Every email mints a
+  fresh random token (only its SHA-256 is stored in `availability_response_tokens`, 30-day TTL,
+  pruned by the reminder job); a token can read/write only that one user's availability and
+  nothing else, and resolves to nothing for an inactive user. The email buttons carry the answer
+  as `?d=<dates>&s=<status>`, but `/respond` shows a one-tap confirm instead of saving on page
+  load — email security scanners open every link, so saving on GET would answer for people.
+  `GET /api/respond/:token` also returns the person's upcoming assignments, so the link in
+  schedule-notification emails doubles as a no-login "my schedule" page. Exists because volunteers were
+  replying to the email instead of clicking through to a page that required a login.
+  `GET /api/admin/availability-grid` (`getAvailabilityGrid` in `scheduling/availabilityGaps.ts`)
+  powers `/admin/availability` ("Who's Answered?"), a users × dates grid where one click per cell
+  records an answer — for transcribing replies/phone calls from people who don't use the buttons.
+- `lib/emailLayout.ts` — shared large-type, table-based email HTML (`emailLayout`, `emailButton`)
+  and `appUrl()` for links (`APP_URL`, defaulting to `BETTER_AUTH_URL`; only differs in local dev).
+  Without SMTP configured and outside production, `lib/mailer.ts` writes each email to
+  `apps/api/data/dev-outbox/*.html` instead, so email content/links can be checked locally.
 - `lib/mailer.ts` — outbound email via Gmail/Google Workspace SMTP (nodemailer + an app password),
   same optional/no-op-when-unconfigured pattern as `lib/r2.ts` (`isMailerConfigured()` /
   `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace
@@ -160,7 +194,14 @@ frontend hook together.
 (concrete dated instances, materialized ahead by `OCCURRENCE_HORIZON_WEEKS`, one row per date,
 unique on `(eventId, startAt)`) → `volunteer_roles` (the actual per-occurrence opportunity,
 optionally `stackable`) → `assignments` (user ↔ role, `status` scheduled/confirmed/declined/completed).
-One-off events skip the template step and write their occurrence + roles directly.
+One-off events write their single occurrence + roles directly at creation (no generator run),
+but still store `event_role_templates` (linked via `sourceTemplateId`) so the Edit Event page can
+list/edit "Roles needed" the same way for both kinds; one-off events created before that change
+have no templates. Adding/removing a template via `/api/events/:id/role-templates`
+(`events/service.ts::addRoleTemplate`/`deleteRoleTemplate`) also adds/removes the matching role on
+every already-materialized **future** occurrence — removal skips any role that already has an
+assignment — so a template change shows up on upcoming dates immediately instead of only on
+dates generated past the horizon.
 
 `teams` / `team_memberships` are separate from all of the above. One team is special:
 `teams.isSystemTeam` marks the auto-provisioned "All Volunteers" team, which has **no real
@@ -187,7 +228,7 @@ from an explicit `status: 'unavailable'`.
   role names via a checklist in the confirm modal, computed as the union of role names across
   everything selected) and `/admin/reminders`'s "Custom schedule notification" section (`POST
   /api/schedule/notify`, same `useOccurrencePicker` instance pattern, its own separate state).
-  Every email-sending action in the app lives on `/admin/reminders` (`Reminders.tsx`) — nothing
+  Every bulk email-sending action in the app lives on `/admin/reminders` (`Reminders.tsx`) — the per-person welcome email on the Users page is the deliberate exception — nothing
   outside that page calls `useSendAvailabilityRemindersNow`/`useSendScheduleNotifications` — and
   every one of them is gated by a confirm `Modal` before sending, never a bare button. Three
   sections: an Availability Reminders card (`sendAvailabilityRemindersNow`, "Send now" is a
@@ -210,10 +251,31 @@ from an explicit `status: 'unavailable'`.
   `AppLayout.tsx`'s nav can't collapse via inline styles alone (no media queries there), so it
   hides `.app-nav` and shows a `.nav-toggle` hamburger button behind that breakpoint, toggled by
   local `menuOpen` state that also resets on every route change.
+- Admin edits save the moment you pick something wherever possible, with feedback via
+  `components/Toast.tsx` (`useToast()`, a "Saved"/"X assigned — Undo" toast) — e.g. picking a
+  name in the occurrence page's assign dropdown or the Teams page's add-member dropdown saves
+  immediately, no separate Assign/Add button. This is deliberate: non-technical admins kept
+  picking someone and navigating away without clicking the button. Where a page genuinely needs
+  an explicit Save (`EventEditor.tsx`), *everything* on it (details, new roles, removed roles)
+  stays pending until that one Save, behind an "unsaved changes" bar and
+  `components/useUnsavedChangesWarning.ts` (beforeunload + capture-phase link-click confirm,
+  since `<BrowserRouter>` has no `useBlocker`). Don't reintroduce mixed instant/pending saving
+  on one page.
 - `components/StackedBarChart.tsx` is a hand-rolled CSS bar chart, not a charting library —
   `recharts` (both v2 and v3) renders invisible/broken bars in this environment; don't reintroduce it.
 
 ## Gotchas
+
+- **Timezone: availability is keyed by Eastern calendar date.** Every user is in Eastern time,
+  and "which date is this occurrence on?" must agree between server and browser, so anything that
+  turns an occurrence's `startAt` into an `availability` date key uses `toAppDateKey()` from
+  `packages/shared/src/dates.ts` (`APP_TIMEZONE = 'America/New_York'`) — server (reminder gaps,
+  fairness's available check, email links) and web (Availability page, Calendar grouping) alike.
+  Server-rendered times (emails) use `formatInAppTimezone()` from `lib/dates.ts`, because plain
+  date-fns `format` uses the server's own clock (the Pi may be UTC → a 10am service prints as
+  3:00 PM). `toUtcDateOnly` remains only for rrule expansion in `generateOccurrences.ts`, whose
+  dates really are UTC midnights. Browser-side display still uses the browser's clock, which is
+  fine as long as users are in Eastern time.
 
 - `import rrulePkg from 'rrule'; const { rrulestr } = rrulePkg;` — a named import
   (`import { rrulestr } from 'rrule'`) throws under Node's ESM loader for this package.

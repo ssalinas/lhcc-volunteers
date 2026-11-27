@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import type { UserRole } from '@lhcc/shared';
+import { format } from 'date-fns';
+import type { UserRole, UserSummary } from '@lhcc/shared';
 import { AvailabilityDateList } from '../../components/AvailabilityDateList.js';
-import { useAdminUsers, useCreateUser, useDeleteUser, useUpdateUser } from '../../api/hooks.js';
+import { Modal } from '../../components/Modal.js';
+import { useToast } from '../../components/Toast.js';
+import { useAdminUsers, useCreateUser, useDeleteUser, useSendWelcomeEmail, useUpdateUser } from '../../api/hooks.js';
 
 export default function AdminUsers() {
   const { data: users, isLoading } = useAdminUsers();
@@ -9,6 +12,8 @@ export default function AdminUsers() {
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
   const [availabilityUserId, setAvailabilityUserId] = useState<string | null>(null);
+  const [welcomeFor, setWelcomeFor] = useState<UserSummary | null>(null);
+  const toast = useToast();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
@@ -23,7 +28,11 @@ export default function AdminUsers() {
     createUser.mutate(
       { name, email, role, password: password || undefined },
       {
-        onSuccess: () => {
+        onSuccess: (created) => {
+          toast(`Created ${created.name}`, {
+            action: { label: 'Send welcome email', onClick: () => setWelcomeFor(created) },
+            duration: 12000,
+          });
           setName('');
           setEmail('');
           setPassword('');
@@ -52,10 +61,10 @@ export default function AdminUsers() {
     <div>
       <h1>Users</h1>
       <p>
-        Create an account here to invite someone. If you set a temporary password they can sign in with it directly;
-        otherwise they can sign in with Google using this exact email address once we have Google sign-in configured.
-        Anyone who signs in with Google without an existing invite gets a brand-new account that starts out
-        inactive — they can't use the app until you check "Active" for them below.
+        Add someone here, then click <strong>Send welcome email</strong> — it explains the app and gives them a button
+        to answer which dates they can serve. Nobody needs a password: they sign in by typing their email and tapping
+        the link we email them. (A temporary password is optional, for anyone who prefers one.) Anyone who signs in
+        with Google without being added here first starts out inactive — check "Active" for them below.
       </p>
 
       <form
@@ -133,7 +142,21 @@ export default function AdminUsers() {
                   />
                 </td>
                 <td style={{ padding: '0.6rem 0.9rem' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setWelcomeFor(u)}
+                      disabled={!u.active}
+                      title={u.active ? undefined : 'Check "Active" first'}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      {u.welcomeEmailSentAt ? 'Resend welcome' : 'Send welcome email'}
+                    </button>
+                    {u.welcomeEmailSentAt && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-faint)', whiteSpace: 'nowrap' }}>
+                        sent {format(new Date(u.welcomeEmailSentAt), 'MMM d')}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => setAvailabilityUserId(availabilityUserId === u.id ? null : u.id)}
@@ -158,6 +181,8 @@ export default function AdminUsers() {
         </table>
       )}
 
+      {welcomeFor && <SendWelcomeModal user={welcomeFor} onClose={() => setWelcomeFor(null)} />}
+
       {availabilityUserId && (
         <div style={{ marginTop: '1.5rem' }}>
           <h2>{users?.find((u) => u.id === availabilityUserId)?.name}'s availability</h2>
@@ -168,6 +193,48 @@ export default function AdminUsers() {
         </div>
       )}
     </div>
+  );
+}
+
+function SendWelcomeModal({ user, onClose }: { user: UserSummary; onClose: () => void }) {
+  const send = useSendWelcomeEmail();
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Modal title="Send welcome email?" onClose={onClose}>
+      <p style={{ marginTop: 0 }}>
+        Email <strong>{user.name}</strong> ({user.email}) a welcome message that explains the volunteer app, with a
+        button to tell us which dates they can serve and simple no-password sign-in steps.
+      </p>
+      {user.welcomeEmailSentAt && (
+        <p style={{ color: '#9a6b00', fontSize: '0.9rem' }}>
+          They were already sent one on {format(new Date(user.welcomeEmailSentAt), 'MMM d, yyyy')}.
+        </p>
+      )}
+      {error && <p style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+        <button type="button" onClick={onClose} className="btn btn-secondary">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={send.isPending}
+          onClick={() =>
+            send.mutate(user.id, {
+              onSuccess: () => {
+                toast(`Welcome email sent to ${user.name}`);
+                onClose();
+              },
+              onError: (err) => setError(err instanceof Error ? err.message : 'Could not send'),
+            })
+          }
+          className="btn btn-primary"
+        >
+          {send.isPending ? 'Sending…' : 'Send it'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

@@ -112,8 +112,12 @@ input[type='checkbox'] {
   line-height: 1.2;
 }
 
-.btn:disabled {
-  opacity: 0.55;
+.btn:disabled,
+.btn:disabled:hover {
+  /* Grey, not a faded brand color — a faded blue button reads as "clickable" to many users. */
+  background: var(--color-border);
+  border-color: var(--color-border);
+  color: var(--color-text-faint);
   cursor: not-allowed;
 }
 
@@ -298,4 +302,68 @@ input[type='checkbox'] {
     align-items: flex-start !important;
     gap: 0.15rem !important;
   }
+}
+
+/* ---------- Toasts (components/Toast.tsx) ---------- */
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2000;
+  width: min(480px, calc(100vw - 2rem));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-text);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.toast-error {
+  background: var(--color-danger);
+}
+
+.toast-action {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.8rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ---------- Unsaved-changes bar (EventEditor) ---------- */
+
+.unsaved-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--color-accent-light);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-weight: 600;
 }

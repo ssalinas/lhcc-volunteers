@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  Assignment,
   AutoScheduleResult,
   AvailabilityEntry,
+  AvailabilityGrid,
   AvailabilityReminderStatus,
   AvailabilityStatus,
   BackupStatus,
@@ -15,14 +17,18 @@ import type {
   EligibleCandidate,
   Event,
   EventLastNotified,
+  LoginOptions,
   OccurrenceDetail,
   OccurrenceSummary,
+  RespondPage,
   RunAvailabilityRemindersNowResult,
   RunBackupResult,
   ScheduleNotificationResult,
+  SendWelcomeEmailResult,
   TeamMember,
   TeamSummaryEntry,
   TeamWithMemberCount,
+  UpdateAssignmentInput,
   UpdateEventInput,
   UpdateMyPreferencesInput,
   UpdateOccurrenceInput,
@@ -109,7 +115,10 @@ export function useSetAvailabilityForDate(userId?: string) {
   return useMutation({
     mutationFn: ({ date, status }: { date: string; status: AvailabilityStatus }) =>
       api.put<AvailabilityEntry>(`${availabilityBasePath(userId)}/dates/${date}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] });
+      qc.invalidateQueries({ queryKey: ['availability-grid'] });
+    },
   });
 }
 
@@ -117,7 +126,55 @@ export function useClearAvailabilityForDate(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (date: string) => api.delete(`${availabilityBasePath(userId)}/dates/${date}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability', userId ?? 'me'] });
+      qc.invalidateQueries({ queryKey: ['availability-grid'] });
+    },
+  });
+}
+
+// ---------- Login page ----------
+
+export function useLoginOptions() {
+  return useQuery({ queryKey: ['login-options'], queryFn: () => api.get<LoginOptions>('/api/login-options'), staleTime: Infinity });
+}
+
+// ---------- Login-free email-link responses (/respond) ----------
+// Public: the token from the email link is the only credential (see api lib/responseTokens.ts).
+
+export function useRespondPage(token: string | null) {
+  return useQuery({
+    queryKey: ['respond', token],
+    queryFn: () => api.get<RespondPage>(`/api/respond/${token}`),
+    enabled: !!token,
+    retry: false,
+  });
+}
+
+export function useRespondSetDate(token: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ date, status }: { date: string; status: AvailabilityStatus }) =>
+      api.put(`/api/respond/${token}/dates/${date}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['respond', token] }),
+  });
+}
+
+export function useRespondClearDate(token: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => api.delete(`/api/respond/${token}/dates/${date}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['respond', token] }),
+  });
+}
+
+// ---------- Admin: availability grid ----------
+
+export function useAvailabilityGrid(from: string, to: string) {
+  return useQuery({
+    queryKey: ['availability-grid', from, to],
+    queryFn: () =>
+      api.get<AvailabilityGrid>(`/api/admin/availability-grid?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   });
 }
 
@@ -154,6 +211,14 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateUserInput }) =>
       api.patch<UserSummary>(`/api/admin/users/${id}`, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useSendWelcomeEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<SendWelcomeEmailResult>(`/api/admin/users/${id}/send-welcome`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 }
@@ -216,7 +281,11 @@ export function useAddRoleTemplate() {
   return useMutation({
     mutationFn: ({ eventId, input }: { eventId: string; input: CreateEventRoleTemplateInput }) =>
       api.post(`/api/events/${eventId}/role-templates`, input),
-    onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] }),
+    // Role-template changes now also add/remove roles on upcoming occurrences (events/service.ts).
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] });
+      qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
   });
 }
 
@@ -225,7 +294,11 @@ export function useDeleteRoleTemplate() {
   return useMutation({
     mutationFn: ({ eventId, templateId }: { eventId: string; templateId: string }) =>
       api.delete(`/api/events/${eventId}/role-templates/${templateId}`),
-    onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] }),
+    // Role-template changes now also add/remove roles on upcoming occurrences (events/service.ts).
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'events', vars.eventId] });
+      qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
   });
 }
 
@@ -291,11 +364,23 @@ export function useCreateAssignment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ input, occurrenceId }: { input: CreateAssignmentInput; occurrenceId: string }) =>
-      api.post('/api/assignments', input),
+      api.post<Assignment>('/api/assignments', input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['occurrences', 'detail', vars.occurrenceId] });
       qc.invalidateQueries({ queryKey: ['occurrences', vars.occurrenceId, 'eligible-candidates'] });
       qc.invalidateQueries({ queryKey: ['occurrences'] });
+    },
+  });
+}
+
+/** Used by the occurrence page's Undo after removing someone, to put back a non-default status. */
+export function useUpdateAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateAssignmentInput; occurrenceId: string }) =>
+      api.patch<Assignment>(`/api/assignments/${id}`, input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['occurrences', 'detail', vars.occurrenceId] });
     },
   });
 }
