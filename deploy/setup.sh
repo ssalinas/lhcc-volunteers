@@ -151,6 +151,19 @@ echo "==> Installing dependencies as ${RUN_USER} (builds native modules for this
 # deploy/auto-update.sh.
 as_app npm ci
 
+# npm 12+ silently skips dependency install scripts that aren't listed in package.json's
+# `allowScripts` (it only warns), which leaves better-sqlite3 without its native binary and
+# fails much later in migrate. Catch that here with a clear message instead.
+if ! as_app node -e "new (require('better-sqlite3'))(':memory:').close()" 2>/dev/null; then
+  cat >&2 <<EOF
+error: better-sqlite3 was installed but its native module doesn't load.
+  - npm 12+: make sure "better-sqlite3": true is in the root package.json "allowScripts".
+  - Otherwise the build may have failed: run ./deploy/setup-sqlite.sh for build tools, then
+    re-run this script and check the npm output above for better-sqlite3 errors.
+EOF
+  exit 1
+fi
+
 echo "==> Applying database migrations"
 as_app npm run db:migrate -w apps/api
 

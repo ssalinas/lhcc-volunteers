@@ -314,6 +314,13 @@ from an explicit `status: 'unavailable'`.
   This is load-bearing: better-auth's optional React client dependency was getting hoisted
   separately from `apps/web`'s own React, causing a duplicate-React-copy "Invalid hook call" bug.
   Don't remove it without re-verifying.
+- **npm 12 doesn't run dependency install scripts unless they're allow-listed.** Root
+  `package.json` `allowScripts` approves `better-sqlite3` (builds/downloads its native binary) and
+  `esbuild` (used by tsx/Vite), and denies `fsevents` (macOS-only). If one is missing, npm 12 skips
+  it with only a warning and `npm ci` still succeeds, so better-sqlite3 later throws "Could not
+  locate the bindings file". This happened in production. A new dependency with a native build
+  needs an entry here too. `deploy/setup.sh` checks that better-sqlite3 loads right after
+  `npm ci`. npm 11 only warns about this field.
 - SQLite runs in WAL mode with `foreign_keys = ON` (set in `db/client.ts`); the "max one role per
   occurrence unless stackable" rule is enforced in application code (`modules/assignments/service.ts`),
   not a DB constraint — SQLite can't express that cross-table rule as one.
