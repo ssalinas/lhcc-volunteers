@@ -47,7 +47,7 @@ echo "==> sqlite3 CLI version: $(sqlite3 --version)"
 
 if [[ ! -d "$DATA_DIR" ]]; then
   echo "==> Creating ${DATA_DIR}"
-  mkdir -p "$DATA_DIR"
+  sudo mkdir -p "$DATA_DIR"
 else
   echo "==> ${DATA_DIR} already exists"
 fi
@@ -57,8 +57,7 @@ if id "$RUN_USER" &>/dev/null; then
   sudo chown -R "${RUN_USER}:${RUN_USER}" "$DATA_DIR"
 else
   echo "==> System user \"${RUN_USER}\" doesn't exist yet — skipping ownership change."
-  echo "    Create it (sudo useradd -r -s /usr/sbin/nologin ${RUN_USER}) and re-run this"
-  echo "    script, or just run ./deploy/setup.sh first, which creates and chowns it too."
+  echo "    ./deploy/setup.sh creates the user and fixes ownership — just run it next."
 fi
 
 echo "==> Done."

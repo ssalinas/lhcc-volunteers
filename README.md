@@ -94,20 +94,29 @@ the email/password login form is available, which is enough to develop and test 
 ### Quick path: `deploy/setup.sh`
 
 Once the one-off manual steps below are done the first time, `deploy/setup.sh` handles
-everything else — pulling `main`, `npm install`, migrations, build, installing/refreshing the
-systemd unit, and restarting the service. It's also the update script: re-run it any time to
-deploy the latest `main`.
+everything else — creating the `lhcc` system user, pulling `main`, `npm ci`, migrations, build,
+installing/refreshing the systemd unit, and restarting the service. It's also the update script:
+re-run it any time to deploy the latest `main`.
 
-1. **Get the code onto the Pi and create the run user** (native modules like `better-sqlite3`
-   need to be installed *on the Pi itself*, ARM, not on your dev machine — `setup.sh` does that
-   part for you):
+**The app runs as the `lhcc` user, and so does everything that writes into the checkout.**
+`setup.sh` re-runs itself with `sudo`, does `git pull` and systemd as root, `chown`s the whole
+checkout to `lhcc`, and runs `npm ci`, migrations, seed and build as `lhcc`. Don't run `npm`
+in `/opt/lhcc-volunteers` yourself or with `sudo`: npm runs package install scripts as the
+directory's owner, so mixed ownership leaves `better-sqlite3` without its compiled binary
+(`Could not locate the bindings file`), and `sudo npm` can leave root-owned files in `lhcc`'s
+npm cache (`Your cache folder contains root-owned files`). Re-running `./deploy/setup.sh` fixes
+both: it hands the checkout and `lhcc`'s caches back to `lhcc` before installing.
+Node must be installed system-wide (e.g. NodeSource apt packages, not nvm under your home
+directory) so `lhcc` can run it.
+
+1. **Get the code onto the Pi** (native modules like `better-sqlite3` need to be installed
+   *on the Pi itself*, ARM, not on your dev machine — `setup.sh` does that part for you):
    ```bash
-   git clone <this repo> /opt/lhcc-volunteers
+   sudo git clone https://github.com/ssalinas/lhcc-volunteers.git /opt/lhcc-volunteers
    cd /opt/lhcc-volunteers
-   sudo useradd -r -s /usr/sbin/nologin lhcc   # if it doesn't already exist
    ```
 2. **Install SQLite.** `deploy/setup-sqlite.sh` installs the `sqlite3` CLI (handy for
-   inspecting the database or restoring a backup by hand) and the build tools `npm install`
+   inspecting the database or restoring a backup by hand) and the build tools `npm ci`
    may need to compile `better-sqlite3` from source if no prebuilt binary matches this Pi's
    architecture/Node version, and provisions the `data/` directory the systemd service writes
    to:
@@ -176,25 +185,32 @@ HTTPS remote, or a read-only GitHub deploy key for a private repo) — the setup
 
 If you'd rather do it by hand, or want to understand what the scripts do:
 
-1. **Install dependencies and build** (on the Pi, ARM, so `better-sqlite3` compiles for the
-   right architecture):
+Every `npm` command here runs as `lhcc` (see the note under "Quick path"). A system user has no
+home directory, so give it one for npm's cache:
+
+1. **Create the run user and install dependencies and build** (on the Pi, ARM, so
+   `better-sqlite3` compiles for the right architecture):
    ```bash
-   npm install
-   npm run build
+   sudo useradd --system --home-dir /var/lib/lhcc-volunteers --shell /usr/sbin/nologin lhcc
+   sudo mkdir -p /var/lib/lhcc-volunteers && sudo chown lhcc:lhcc /var/lib/lhcc-volunteers
+   sudo chown -R lhcc:lhcc /opt/lhcc-volunteers
+   alias as-lhcc='sudo -u lhcc env HOME=/var/lib/lhcc-volunteers'
+   as-lhcc npm ci
+   as-lhcc npm run build
    ```
 2. **Configure environment.** Copy `.env.example` to `apps/api/.env` and fill it in —
    `BETTER_AUTH_SECRET` (generate with `openssl rand -base64 32`), `BETTER_AUTH_URL` (your public
    HTTPS URL), `GOOGLE_CLIENT_ID`/`SECRET` if using Google sign-in.
-3. **Run migrations and seed the first admin:**
+3. **Run migrations and seed the first admin.** Pass `DATABASE_PATH` as an absolute path:
+   these scripts run from `apps/api/`, but the service resolves the relative default
+   (`./data/lhcc.sqlite`) from the repo root, so without it they'd write to a different file:
    ```bash
-   npm run db:migrate -w apps/api
-   npm run db:seed -w apps/api
+   as-lhcc DATABASE_PATH=/opt/lhcc-volunteers/data/lhcc.sqlite npm run db:migrate -w apps/api
+   as-lhcc DATABASE_PATH=/opt/lhcc-volunteers/data/lhcc.sqlite npm run db:seed -w apps/api
    ```
 4. **Reverse proxy / HTTPS** — see step 4 above.
 5. **Install the systemd service:**
    ```bash
-   sudo useradd -r -s /usr/sbin/nologin lhcc   # if it doesn't already exist
-   sudo chown -R lhcc:lhcc /opt/lhcc-volunteers
    sudo cp deploy/lhcc-volunteers.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable --now lhcc-volunteers
@@ -240,7 +256,7 @@ cd /opt/lhcc-volunteers
 ./deploy/setup.sh
 ```
 
-That's `git pull` + `npm install` + `db:migrate` + `npm run build` + reinstall the systemd unit
+That's `git pull` + `npm ci` + `db:migrate` + `npm run build` + reinstall the systemd unit
 if it changed + restart, all in one idempotent script — see `deploy/setup.sh`. It refuses to run
 if there are uncommitted local changes on the Pi. Note it only ever runs `db:migrate`, never
 `db:generate` — migrations are generated during development and committed to the repo, not
