@@ -122,6 +122,15 @@ export const occurrencesRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  app.delete(
+    '/api/occurrences/:id/roles/:roleId',
+    { schema: { params: z.object({ id: idSchema, roleId: idSchema }) } },
+    async (request) => {
+      await requireAdmin(request);
+      return occurrencesService.deleteRole(request.params.id, request.params.roleId);
+    },
+  );
+
   app.get(
     '/api/occurrences/:id/eligible-candidates',
     {

@@ -86,3 +86,18 @@ export async function addAdHocRole(occurrenceId: string, input: CreateVolunteerR
     .returning();
   return created;
 }
+
+/**
+ * Removes one role from one date (and, via ON DELETE CASCADE, anyone assigned to it). The
+ * event's role template, if any, is untouched — other dates keep the role. Used to clean up a
+ * duplicate or a role that isn't needed that day.
+ */
+export async function deleteRole(occurrenceId: string, roleId: string) {
+  const role = await db.query.volunteerRoles.findFirst({
+    where: and(eq(volunteerRoles.id, roleId), eq(volunteerRoles.eventOccurrenceId, occurrenceId)),
+    with: { assignments: { columns: { id: true } } },
+  });
+  if (!role) throw new NotFoundError('Role not found');
+  await db.delete(volunteerRoles).where(eq(volunteerRoles.id, roleId));
+  return { removedAssignments: role.assignments.length };
+}

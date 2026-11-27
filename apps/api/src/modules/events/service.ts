@@ -6,6 +6,7 @@ import { newId } from '../../lib/ids.js';
 import { NotFoundError } from '../../lib/http-errors.js';
 import { generateOccurrencesForEvent, regenerateOccurrencesForEvent } from '../../jobs/generateOccurrences.js';
 import { combineDateAndTimeInZone } from '../../lib/dates.js';
+import { roleNameKey } from '../../jobs/dedupeOccurrenceRoles.js';
 
 export async function listEvents() {
   return db.query.events.findMany({
@@ -135,25 +136,39 @@ export async function createRoleTemplate(eventId: string, input: CreateEventRole
  * event. Without the second part, a new role only showed up on dates generated later (past the
  * OCCURRENCE_HORIZON_WEEKS window), so admins added "Greeter" and saw it on none of the
  * upcoming Sundays.
+ *
+ * If a date already has a same-name role that isn't linked to any template — typically left
+ * behind when this role was removed earlier while someone was assigned (see deleteRoleTemplate),
+ * or added ad hoc — that role is adopted (linked, and updated to the template's team/slots)
+ * instead of getting a second copy beside it. Its volunteers stay put.
  */
 export async function addRoleTemplate(eventId: string, input: CreateEventRoleTemplateInput) {
   await getEvent(eventId);
   const template = await createRoleTemplate(eventId, input);
   const futureOccurrences = await db.query.eventOccurrences.findMany({
     where: and(eq(eventOccurrences.eventId, eventId), gt(eventOccurrences.startAt, new Date())),
+    with: { roles: { with: { assignments: { columns: { id: true } } } } },
   });
+  const fields = {
+    teamId: template.teamId,
+    name: template.name,
+    slotsCount: template.slotsCount,
+    stackable: template.stackable,
+    sourceTemplateId: template.id,
+  };
+  let rolesAdopted = 0;
   for (const occurrence of futureOccurrences) {
-    await db.insert(volunteerRoles).values({
-      id: newId(),
-      eventOccurrenceId: occurrence.id,
-      teamId: template.teamId,
-      name: template.name,
-      slotsCount: template.slotsCount,
-      stackable: template.stackable,
-      sourceTemplateId: template.id,
-    });
+    const leftover = occurrence.roles
+      .filter((r) => r.sourceTemplateId === null && roleNameKey(r.name) === roleNameKey(template.name))
+      .sort((a, b) => b.assignments.length - a.assignments.length)[0];
+    if (leftover) {
+      await db.update(volunteerRoles).set(fields).where(eq(volunteerRoles.id, leftover.id));
+      rolesAdopted++;
+    } else {
+      await db.insert(volunteerRoles).values({ id: newId(), eventOccurrenceId: occurrence.id, ...fields });
+    }
   }
-  return { template, occurrencesUpdated: futureOccurrences.length };
+  return { template, occurrencesUpdated: futureOccurrences.length, rolesAdopted };
 }
 
 /**

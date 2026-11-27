@@ -357,6 +357,15 @@ export function useAddAdHocRole() {
   });
 }
 
+export function useDeleteOccurrenceRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ occurrenceId, roleId }: { occurrenceId: string; roleId: string }) =>
+      api.delete<{ removedAssignments: number }>(`/api/occurrences/${occurrenceId}/roles/${roleId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['occurrences'] }),
+  });
+}
+
 export function useEligibleCandidates(occurrenceId: string | undefined, roleId: string | undefined) {
   return useQuery({
     queryKey: ['occurrences', occurrenceId, 'eligible-candidates', roleId],

@@ -208,7 +208,15 @@ have no templates. Adding/removing a template via `/api/events/:id/role-template
 (`events/service.ts::addRoleTemplate`/`deleteRoleTemplate`) also adds/removes the matching role on
 every already-materialized **future** occurrence — removal skips any role that already has an
 assignment — so a template change shows up on upcoming dates immediately instead of only on
-dates generated past the horizon.
+dates generated past the horizon. Re-adding a template **adopts** a same-name
+(trimmed, case-insensitive) detached role (`sourceTemplateId = null`, e.g. the one left behind by
+that skip) on each future date instead of inserting a duplicate beside it.
+`jobs/dedupeOccurrenceRoles.ts` (runs on boot, idempotent) merges duplicates that already exist
+from before that fix: per occurrence, when exactly one same-name role is template-linked, the
+detached ones' assignments move onto it and they're deleted; other duplicate shapes are left for
+an admin to remove by hand via `DELETE /api/occurrences/:id/roles/:roleId` ("Remove role" on
+`/admin/occurrences/:id`, which flags same-name roles as "Duplicate"; cascades to assignments,
+behind a confirm modal that names who'll be unassigned).
 
 `teams` / `team_memberships` are separate from all of the above. `DELETE /api/teams/:id`
 (`teams/service.ts::removeTeam`) refuses (409, naming the events) while any role template or
