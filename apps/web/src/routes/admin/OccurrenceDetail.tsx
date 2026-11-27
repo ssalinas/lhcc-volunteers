@@ -8,11 +8,13 @@ import {
   useAutoSchedule,
   useCreateAssignment,
   useDeleteAssignment,
+  useDeleteOccurrenceRole,
   useEligibleCandidates,
   useOccurrence,
   useUpdateAssignment,
 } from '../../api/hooks.js';
 import { ApiError } from '../../api/client.js';
+import { Modal } from '../../components/Modal.js';
 import { useToast } from '../../components/Toast.js';
 import { useUnsavedChangesWarning } from '../../components/useUnsavedChangesWarning.js';
 
@@ -23,6 +25,12 @@ export default function AdminOccurrenceDetail() {
   const [autoScheduleMessage, setAutoScheduleMessage] = useState<string | null>(null);
 
   if (isLoading || !occurrence) return <p>Loading…</p>;
+
+  const nameCounts = new Map<string, number>();
+  for (const r of occurrence.roles) {
+    const key = r.name.trim().toLowerCase();
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
 
   function handleAutoSchedule() {
     if (!occurrenceId) return;
@@ -63,7 +71,12 @@ export default function AdminOccurrenceDetail() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
         {occurrence.roles.map((role) => (
-          <RoleCard key={role.id} occurrenceId={occurrence.id} role={role} />
+          <RoleCard
+            key={role.id}
+            occurrenceId={occurrence.id}
+            role={role}
+            isDuplicate={(nameCounts.get(role.name.trim().toLowerCase()) ?? 0) > 1}
+          />
         ))}
         {occurrence.roles.length === 0 && <p>No roles configured for this occurrence yet.</p>}
       </div>
@@ -76,10 +89,13 @@ export default function AdminOccurrenceDetail() {
 function RoleCard({
   occurrenceId,
   role,
+  isDuplicate,
 }: {
   occurrenceId: string;
   role: NonNullable<ReturnType<typeof useOccurrence>['data']>['roles'][number];
+  isDuplicate: boolean;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const deleteAssignment = useDeleteAssignment();
   const createAssignment = useCreateAssignment();
   const updateAssignment = useUpdateAssignment();
@@ -123,12 +139,23 @@ function RoleCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>
           {role.name}{' '}
-          {role.stackable && <span style={{ fontWeight: 400, color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>(stackable)</span>}
+          <span style={{ fontWeight: 400, color: 'var(--color-text-faint)', fontSize: '0.8rem' }}>
+            ({role.teamName}){role.stackable && ' (stackable)'}
+          </span>{' '}
+          {isDuplicate && <span className="badge badge-danger">Duplicate</span>}
         </strong>
-        <span className={`badge ${isFull ? 'badge-success' : 'badge-warning'}`}>
-          {activeAssignments.length}/{role.slotsCount} filled{isOverStaffed ? ' (extra added)' : ''}
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span className={`badge ${isFull ? 'badge-success' : 'badge-warning'}`}>
+            {activeAssignments.length}/{role.slotsCount} filled{isOverStaffed ? ' (extra added)' : ''}
+          </span>
+          <button type="button" onClick={() => setConfirmingDelete(true)} className="btn-ghost" style={{ fontSize: '0.8rem' }}>
+            Remove role
+          </button>
         </span>
       </div>
+      {confirmingDelete && (
+        <DeleteRoleModal occurrenceId={occurrenceId} role={role} onClose={() => setConfirmingDelete(false)} />
+      )}
       <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
         {role.assignments.map((a) => (
           <div key={a.id} style={{ fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -145,6 +172,55 @@ function RoleCard({
 
       <AssignPicker occurrenceId={occurrenceId} roleId={role.id} roleName={role.name} addingExtra={isFull} />
     </div>
+  );
+}
+
+function DeleteRoleModal({
+  occurrenceId,
+  role,
+  onClose,
+}: {
+  occurrenceId: string;
+  role: { id: string; name: string; assignments: { user?: { name: string } | null }[] };
+  onClose: () => void;
+}) {
+  const deleteRole = useDeleteOccurrenceRole();
+  const toast = useToast();
+  const names = role.assignments.map((a) => a.user?.name ?? 'Volunteer');
+
+  function handleDelete() {
+    deleteRole.mutate(
+      { occurrenceId, roleId: role.id },
+      {
+        onSuccess: () => {
+          toast(`Removed ${role.name} from this date`);
+          onClose();
+        },
+        onError: (err) => toast(errorMessage(err, 'Could not remove the role'), { variant: 'error' }),
+      },
+    );
+  }
+
+  return (
+    <Modal title={`Remove ${role.name} from this date?`} onClose={onClose}>
+      <p style={{ marginTop: 0 }}>
+        This only removes it from this one date. The event's other dates and its "Roles needed" list
+        stay the same.
+      </p>
+      {names.length > 0 && (
+        <p style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+          {names.join(', ')} {names.length === 1 ? 'is' : 'are'} assigned to it and will be taken off this date.
+        </p>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+        <button type="button" onClick={onClose} className="btn btn-secondary">
+          Cancel
+        </button>
+        <button type="button" onClick={handleDelete} disabled={deleteRole.isPending} className="btn btn-danger">
+          {deleteRole.isPending ? 'Removing…' : 'Remove role'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

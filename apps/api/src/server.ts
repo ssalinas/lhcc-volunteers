@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { generateAllOccurrences } from './jobs/generateOccurrences.js';
 import { runDatabaseBackup } from './jobs/backupDb.js';
 import { ensureSystemTeams } from './jobs/ensureSystemTeams.js';
+import { dedupeOccurrenceRoles } from './jobs/dedupeOccurrenceRoles.js';
 import { runAvailabilityReminderCycle } from './jobs/sendAvailabilityReminders.js';
 
 async function main() {
@@ -14,6 +15,10 @@ async function main() {
 
   const { eventsProcessed, occurrencesCreated } = await generateAllOccurrences();
   app.log.info({ eventsProcessed, occurrencesCreated }, 'Generated recurring event occurrences on boot');
+
+  // Cleans up duplicate same-name roles left by removing and re-adding a role (see the job).
+  const dedupe = await dedupeOccurrenceRoles();
+  if (dedupe.rolesMerged > 0) app.log.info(dedupe, 'Merged duplicate roles on boot');
 
   cron.schedule('0 3 * * *', async () => {
     const result = await generateAllOccurrences();
