@@ -10,6 +10,9 @@
 #   - fill in apps/api/.env (copy from .env.example) with real secrets
 #
 # Usage: ./deploy/setup.sh
+#
+# To have merges to main deploy themselves, run ./deploy/setup-auto-update.sh once afterwards —
+# it installs a systemd timer that runs this script whenever main changes.
 
 set -euo pipefail
 
@@ -71,7 +74,11 @@ git pull --ff-only origin main
 # --- Install, migrate, build ----------------------------------------------------
 
 echo "==> Installing dependencies (rebuilds native modules for this machine)"
-npm install
+# `npm ci`, not `npm install`: it installs exactly what package-lock.json says and never rewrites
+# it, so the checkout stays clean — a lockfile rewritten on the Pi would trip the "uncommitted
+# changes" check above and block every later deploy, including unattended ones from
+# deploy/auto-update.sh.
+npm ci
 
 echo "==> Applying database migrations"
 npm run db:migrate -w apps/api

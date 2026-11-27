@@ -1,0 +1,12 @@
+[Unit]
+Description=LHCC Volunteers — deploy latest main if it changed
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root: setup.sh needs to chown the repo, refresh the systemd unit, and restart the app.
+ExecStart=/opt/lhcc-volunteers/deploy/auto-update.sh
+# A full npm ci + build on a Pi can take a while.
+TimeoutStartSec=30min
+Nice=10

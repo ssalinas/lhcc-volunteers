@@ -67,7 +67,7 @@ export async function getTeamSummary(windowWeeks: number, teamId?: string) {
     })
     .from(teams)
     .leftJoin(teamMemberships, eq(teamMemberships.teamId, teams.id))
-    .where(teamId ? eq(teams.id, teamId) : undefined)
+    .where(teamId ? eq(teams.id, teamId) : eq(teams.active, true)) // skip removed (archived) teams
     .groupBy(teams.id);
 
   const activityRows = await db

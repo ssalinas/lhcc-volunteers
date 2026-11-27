@@ -76,6 +76,17 @@ export const teamsRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  // Returns { archived } — true when the team had past schedule history and was hidden rather
+  // than deleted (see teamsService.removeTeam).
+  app.delete(
+    '/api/teams/:id',
+    { schema: { params: z.object({ id: idSchema }) } },
+    async (request) => {
+      await requireAdmin(request);
+      return teamsService.removeTeam(request.params.id);
+    },
+  );
+
   app.get(
     '/api/teams/:id/members',
     { schema: { params: z.object({ id: idSchema }) } },

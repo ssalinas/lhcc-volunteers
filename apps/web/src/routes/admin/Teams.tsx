@@ -3,6 +3,7 @@ import { Modal } from '../../components/Modal.js';
 import {
   useAdminUsers,
   useCreateTeam,
+  useDeleteTeam,
   useJoinTeam,
   useLeaveTeam,
   useTeamMembers,
@@ -14,6 +15,8 @@ export default function AdminTeams() {
   const { data: teams } = useTeams();
   const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [teamToRemove, setTeamToRemove] = useState<{ id: string; name: string } | null>(null);
+  const selectedTeam = teams?.find((t) => t.id === selectedTeamId);
 
   return (
     <div>
@@ -25,6 +28,16 @@ export default function AdminTeams() {
       </div>
 
       {showCreateModal && <CreateTeamModal onClose={() => setShowCreateModal(false)} />}
+      {teamToRemove && (
+        <RemoveTeamModal
+          team={teamToRemove}
+          onClose={() => setTeamToRemove(null)}
+          onRemoved={() => {
+            setTeamToRemove(null);
+            setSelectedTeamId(undefined);
+          }}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
         <div style={{ minWidth: 220 }}>
@@ -56,8 +69,20 @@ export default function AdminTeams() {
         </div>
 
         <div style={{ flex: 1, minWidth: 280 }}>
-          {selectedTeamId ? (
-            <TeamMembersPanel teamId={selectedTeamId} isSystemTeam={teams?.find((t) => t.id === selectedTeamId)?.isSystemTeam ?? false} />
+          {selectedTeam ? (
+            <>
+              <TeamMembersPanel teamId={selectedTeam.id} isSystemTeam={selectedTeam.isSystemTeam} />
+              {!selectedTeam.isSystemTeam && (
+                <button
+                  type="button"
+                  onClick={() => setTeamToRemove(selectedTeam)}
+                  className="btn btn-danger btn-sm"
+                  style={{ marginTop: '1.5rem' }}
+                >
+                  Remove this team
+                </button>
+              )}
+            </>
           ) : (
             <p>Select a team to manage its members.</p>
           )}
@@ -106,6 +131,53 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function RemoveTeamModal({
+  team,
+  onClose,
+  onRemoved,
+}: {
+  team: { id: string; name: string };
+  onClose: () => void;
+  onRemoved: () => void;
+}) {
+  const deleteTeam = useDeleteTeam();
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleRemove() {
+    setError(null);
+    deleteTeam.mutate(team.id, {
+      onSuccess: () => {
+        toast(`Removed the ${team.name} team`);
+        onRemoved();
+      },
+      onError: (err) => setError(err instanceof Error ? err.message : 'Could not remove the team'),
+    });
+  }
+
+  return (
+    <Modal title={`Remove ${team.name}?`} onClose={onClose}>
+      <p style={{ marginTop: 0 }}>
+        Everyone will be taken off this team and it will disappear from the app. Past schedules
+        that used it are kept.
+      </p>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+        If any event still has roles for this team, you'll need to change those roles to another
+        team first.
+      </p>
+      {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{error}</p>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+        <button type="button" onClick={onClose} className="btn btn-secondary">
+          Cancel
+        </button>
+        <button type="button" onClick={handleRemove} disabled={deleteTeam.isPending} className="btn btn-danger">
+          {deleteTeam.isPending ? 'Removing…' : 'Remove team'}
+        </button>
+      </div>
     </Modal>
   );
 }
