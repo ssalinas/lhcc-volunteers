@@ -26,8 +26,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVICE_NAME="lhcc-volunteers"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 RUN_USER="lhcc"
-# lhcc's home: npm's cache and node-gyp's headers live here (a system user has no home by default).
-RUN_HOME="/var/lib/${SERVICE_NAME}"
+# Fallback home for lhcc when it has none: npm's cache and node-gyp's headers need somewhere.
+DEFAULT_RUN_HOME="/var/lib/${SERVICE_NAME}"
 
 if [[ $EUID -ne 0 ]]; then
   exec sudo --preserve-env=PATH "$0" "$@"
@@ -67,10 +67,21 @@ NODE_DIR="$(dirname "$NODE_BIN")"
 
 if ! id "$RUN_USER" &>/dev/null; then
   echo "==> Creating system user ${RUN_USER}"
-  useradd --system --home-dir "$RUN_HOME" --shell /usr/sbin/nologin "$RUN_USER"
+  useradd --system --home-dir "$DEFAULT_RUN_HOME" --shell /usr/sbin/nologin "$RUN_USER"
 fi
+
+# Use lhcc's real home if it has a usable one (e.g. /home/lhcc), else the fallback.
+RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
+case "$RUN_HOME" in
+  "" | / | /nonexistent) RUN_HOME="$DEFAULT_RUN_HOME" ;;
+esac
 mkdir -p "$RUN_HOME"
 chown "${RUN_USER}:${RUN_USER}" "$RUN_HOME"
+# Any earlier `sudo npm ...` may have left root-owned files in lhcc's npm/node-gyp caches, which
+# makes npm refuse to run ("Your cache folder contains root-owned files"). Hand them back.
+for cache in "${RUN_HOME}/.npm" "${RUN_HOME}/.cache"; do
+  [[ -e "$cache" ]] && chown -R "${RUN_USER}:${RUN_USER}" "$cache"
+done
 
 # Runs a command as lhcc with a usable HOME/npm cache and the same node root found above.
 as_app() {

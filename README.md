@@ -103,7 +103,9 @@ re-run it any time to deploy the latest `main`.
 checkout to `lhcc`, and runs `npm ci`, migrations, seed and build as `lhcc`. Don't run `npm`
 in `/opt/lhcc-volunteers` yourself or with `sudo`: npm runs package install scripts as the
 directory's owner, so mixed ownership leaves `better-sqlite3` without its compiled binary
-(`Could not locate the bindings file`). If that happens, re-run `./deploy/setup.sh` to fix it.
+(`Could not locate the bindings file`), and `sudo npm` can leave root-owned files in `lhcc`'s
+npm cache (`Your cache folder contains root-owned files`). Re-running `./deploy/setup.sh` fixes
+both: it hands the checkout and `lhcc`'s caches back to `lhcc` before installing.
 Node must be installed system-wide (e.g. NodeSource apt packages, not nvm under your home
 directory) so `lhcc` can run it.
 

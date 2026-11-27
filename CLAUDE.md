@@ -188,7 +188,7 @@ frontend hook together.
   account instead of a new service.
 - `deploy/` — `setup.sh` is both first-time setup and the update script (pull `main`, `npm ci`,
   migrate, seed, build, refresh systemd unit, restart). It re-execs under sudo; git/chown/systemd run as root,
-  but `npm ci`/migrate/seed/build run as `lhcc` (`as_app`, with `HOME=/var/lib/lhcc-volunteers`)
+  but `npm ci`/migrate/seed/build run as `lhcc` (`as_app`, with `HOME` = lhcc's home, falling back to `/var/lib/lhcc-volunteers`, and its `.npm`/`.cache` chowned back to lhcc each run)
   after a `chown -R` of the checkout — npm runs install scripts as the directory's owner, so
   running npm as root left better-sqlite3 unbuilt ("Could not locate the bindings file") in
   production. It also exports an absolute `DATABASE_PATH` resolved against the repo root, because
