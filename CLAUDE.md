@@ -187,7 +187,13 @@ frontend hook together.
   `sendMail()`). No transactional email API — deliberately reuses the church's existing Workspace
   account instead of a new service.
 - `deploy/` — `setup.sh` is both first-time setup and the update script (pull `main`, `npm ci`,
-  migrate, seed, build, refresh systemd unit, restart). `setup-auto-update.sh` (run once)
+  migrate, seed, build, refresh systemd unit, restart). It re-execs under sudo; git/chown/systemd run as root,
+  but `npm ci`/migrate/seed/build run as `lhcc` (`as_app`, with `HOME=/var/lib/lhcc-volunteers`)
+  after a `chown -R` of the checkout — npm runs install scripts as the directory's owner, so
+  running npm as root left better-sqlite3 unbuilt ("Could not locate the bindings file") in
+  production. It also exports an absolute `DATABASE_PATH` resolved against the repo root, because
+  `db:migrate`/`db:seed` run from `apps/api/` while the service's relative path resolves from the
+  repo root. `setup-auto-update.sh` (run once)
   installs `lhcc-volunteers-update.timer`, which runs `auto-update.sh` as root every 5 minutes:
   `git fetch`, and if `origin/main` differs from `/var/lib/lhcc-volunteers-update/deployed-commit`
   it runs `setup.sh`. A failed commit is recorded in `failed-commit` and not retried until main

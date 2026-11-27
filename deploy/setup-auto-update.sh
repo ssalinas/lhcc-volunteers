@@ -26,8 +26,6 @@ MSG
   exit 1
 fi
 
-chmod +x "$SCRIPT_DIR/auto-update.sh" "$SCRIPT_DIR/setup.sh"
-
 echo "==> Installing ${UNIT}.service and ${UNIT}.timer"
 for ext in service timer; do
   sed "s#/opt/lhcc-volunteers#${REPO_DIR}#g" "$SCRIPT_DIR/${UNIT}.${ext}" | sudo tee "/etc/systemd/system/${UNIT}.${ext}" > /dev/null
